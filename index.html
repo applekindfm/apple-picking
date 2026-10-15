@@ -11,6 +11,398 @@
   header { background:var(--red); color:#fff; padding:16px; text-align:center; }
   header h1 { margin:0; font-size:20px; }
   header p { margin:4px 0 0; font-size:14px; opacity:.9; }
+  main { max-width:520px; margin:0 auto; padding:16px 16px 40px; }
+  .card { background:#fff; border-radius:14px; padding:18px; margin-bottom:14px; box-shadow:0 1px 3px rgba(0,0,0,.06); }
+  h2 { font-size:17px; margin:0 0 12px; display:flex; justify-content:space-between; align-items:center; }
+  label { display:block; font-size:14px; color:var(--sub); margin:12px 0 4px; }
+  input { width:100%; font-size:17px; padding:12px; border:1px solid #ccc; border-radius:10px; background:#fff; }
+  input[readonly] { background:#f4f4f4; }
+  .row { display:flex; gap:8px; }
+  .row > * { flex:1; }
+  button { font-size:17px; border:0; border-radius:10px; padding:14px; cursor:pointer; width:100%; }
+  .primary { background:var(--red); color:#fff; font-weight:700; }
+  .primary:disabled { background:#d9a19b; }
+  .ghost { background:#f1f1f1; color:var(--ink); }
+  .small { font-size:14px; padding:10px; }
+  .link { background:none; color:var(--red); font-size:14px; padding:4px 0; width:auto; font-weight:400; }
+  .add { background:#fff; color:var(--red); border:2px dashed #e0b4af; font-weight:700; margin-bottom:14px; }
+  .chk { display:flex; align-items:center; gap:8px; margin:6px 0 0; font-size:15px; color:var(--ink); }
+  .chk input { width:22px; height:22px; flex:none; }
+  .err { background:var(--red2); color:var(--red); border-radius:10px; padding:12px; margin:0 0 12px; font-size:15px; display:none; }
+  .stepper { display:flex; align-items:center; gap:10px; margin-top:4px; }
+  .stepper button { width:52px; height:52px; padding:0; font-size:26px; font-weight:700; background:#f1f1f1; }
+  .stepper .val { min-width:70px; text-align:center; font-size:26px; font-weight:800; color:var(--red); }
+  .total { text-align:center; font-size:15px; color:var(--sub); margin:6px 0 10px; }
+  .total b { color:var(--red); font-size:18px; }
+  .big { text-align:center; }
+  .big .no { font-size:72px; font-weight:800; color:var(--red); line-height:1.1; }
+  .big .lbl { color:var(--sub); font-size:15px; }
+  .status { border-radius:12px; padding:16px; text-align:center; font-weight:700; font-size:19px; }
+  .s-wait { background:var(--wait2); color:var(--wait); }
+  .s-ok { background:var(--ok2); color:var(--ok); font-size:22px; }
+  .s-gray { background:#eee; color:#555; }
+  .info { font-size:15px; color:var(--sub); }
+  .info b { color:var(--ink); font-weight:600; }
+  .rcp { padding:10px 0; border-bottom:1px solid var(--line); }
+  .rcp:last-child { border-bottom:0; }
+  .tag { display:inline-block; background:var(--red2); color:var(--red); border-radius:6px; padding:1px 8px; font-size:13px; font-weight:700; margin-left:6px; }
+  .steps { display:flex; justify-content:space-between; font-size:12px; color:#aaa; margin:14px 0 0; }
+  .steps span.on { color:var(--red); font-weight:700; }
+  .list a { display:flex; justify-content:space-between; padding:12px 0; border-bottom:1px solid var(--line); color:var(--ink); text-decoration:none; }
+  .hide { display:none !important; }
+  #postLayer { position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:10; display:none; }
+  #postLayer .in { position:absolute; left:0; right:0; bottom:0; top:60px; background:#fff; border-radius:14px 14px 0 0; overflow:hidden; }
+  #postLayer .bar { display:flex; justify-content:space-between; align-items:center; padding:10px 14px; border-bottom:1px solid var(--line); }
+  #postWrap { height:calc(100% - 50px); }
+  .loading { text-align:center; color:var(--sub); padding:30px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🍎 사과따기 택배 접수</h1>
+  <p>애플카인드 · 포장을 마친 뒤 접수해 주세요</p>
+</header>
+
+<main>
+  <div id="vLoading" class="loading">불러오는 중…</div>
+
+  <!-- 내 접수 목록 -->
+  <div id="vList" class="card hide">
+    <h2>내 접수 내역</h2>
+    <div id="listBody" class="list"></div>
+    <button class="ghost small" style="margin-top:12px" onclick="showForm()">+ 새로 접수하기</button>
+  </div>
+
+  <!-- 접수 / 수정 폼 -->
+  <div id="vForm" class="hide">
+    <div class="card">
+      <h2>보내는 분</h2>
+      <label>이름</label>
+      <input id="senderName" autocomplete="name">
+      <label>연락처</label>
+      <input id="senderPhone" type="tel" inputmode="numeric" placeholder="010-0000-0000">
+    </div>
+
+    <div id="rcpForms"></div>
+    <button class="add" onclick="addRecipient()">+ 받는 곳 추가 (다른 주소로도 보내기)</button>
+
+    <div class="card">
+      <label class="chk" id="agreeRow" style="margin:0"><input type="checkbox" id="agree"> 택배 발송을 위한 개인정보(이름·연락처·주소) 수집·이용에 동의합니다. (발송 후 파기)</label>
+    </div>
+    <div id="formErr" class="err"></div>
+    <div class="total" id="formTotal"></div>
+    <button id="btnSave" class="primary" onclick="save()">접수하기</button>
+    <button id="btnBack" class="ghost hide" style="margin-top:8px" onclick="render()">수정 취소</button>
+  </div>
+
+  <!-- 상태 화면 -->
+  <div id="vStatus" class="hide">
+    <div class="card big">
+      <div class="lbl">접수번호</div>
+      <div class="no" id="sNo">-</div>
+      <div class="lbl" id="sNoFull"></div>
+    </div>
+
+    <div class="card">
+      <div id="sBadge" class="status s-wait">-</div>
+      <div class="steps"><span id="st1">접수(송장요청)</span><span id="st2">출력중</span><span id="st3">출력완료</span></div>
+    </div>
+
+    <div class="card">
+      <h2>접수 내용 <span class="info" id="sTotal"></span></h2>
+      <div class="info" id="sSender"></div>
+      <div id="sRcps"></div>
+      <div class="row" style="margin-top:12px" id="editBtns">
+        <button class="ghost small" onclick="editCur()">정보 수정</button>
+        <button class="ghost small" onclick="cancelCur()">택배 안 보낼게요</button>
+      </div>
+    </div>
+
+    <button class="ghost" onclick="showForm()">+ 새로 접수하기</button>
+    <button class="ghost small hide" id="btnList" style="margin-top:8px" onclick="showList()">내 접수 내역 보기</button>
+  </div>
+</main>
+
+<div id="postLayer">
+  <div class="in">
+    <div class="bar"><b>주소 검색</b><button class="ghost small" style="width:auto" onclick="closePost()">닫기</button></div>
+    <div id="postWrap"></div>
+  </div>
+</div>
+
+<script src="https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
+<script>
+// ===== 설정: Apps Script 웹 앱 주소 =====
+var API_URL = 'https://script.google.com/macros/s/AKfycbzVg6NS59RMijBHCXnGQAOUqikt2Toeyvn2IT_MKCVvxHv_Fh0GsuHjeDIzN09s1C9E-A/exec';
+var TIMEOUT_MS = 30000;
+var POLL_MS = 15000;
+var MAX_BOXES = 20, MAX_RCP = 10;
+
+var cur = null, editing = false, pollTimer = null, lastStatus = null;
+var rcps = [];   // 폼의 받는 분 목록
+var $ = function (id) { return document.getElementById(id); };
+
+// ---- 이 폰에 내 접수 보관 ----
+function myTokens() { try { return JSON.parse(localStorage.getItem('ak_pick_tokens') || '[]'); } catch (e) { return []; } }
+function addToken(t, no) {
+  try {
+    var a = myTokens().filter(function (x) { return x.t !== t; });
+    a.unshift({ t: t, no: no, d: Date.now() });
+    localStorage.setItem('ak_pick_tokens', JSON.stringify(a.slice(0, 20)));
+  } catch (e) {}
+}
+
+// ---- 통신 (30초 무응답이면 실패 안내) ----
+function withTimeout(p) {
+  return Promise.race([p, new Promise(function (_, rej) { setTimeout(function () { rej(new Error('timeout')); }, TIMEOUT_MS); })]);
+}
+function apiGet(t) {
+  return withTimeout(fetch(API_URL + '?action=get&t=' + encodeURIComponent(t)).then(function (r) { return r.json(); }));
+}
+function apiPost(body) {
+  return withTimeout(fetch(API_URL, { method: 'POST', body: JSON.stringify(body) }).then(function (r) { return r.json(); }));
+}
+function netMsg(e) {
+  return e && e.message === 'timeout'
+    ? '응답이 없어 저장되지 않았어요. 인터넷 연결을 확인하고 다시 눌러 주세요.'
+    : '저장되지 않았어요. 잠시 후 다시 눌러 주세요.';
+}
+
+// ---- 화면 전환 ----
+function show(id) {
+  ['vLoading', 'vList', 'vForm', 'vStatus'].forEach(function (v) { $(v).classList.toggle('hide', v !== id); });
+  window.scrollTo(0, 0);
+}
+
+function init() {
+  var t = new URLSearchParams(location.search).get('t');
+  if (t) return load(t);
+  if (myTokens().length) return showList();
+  showForm();
+}
+
+function load(t) {
+  show('vLoading');
+  apiGet(t).then(function (res) {
+    if (!res.ok) { alert(res.error || '접수 정보를 찾을 수 없어요.'); history.replaceState(null, '', location.pathname); return showForm(); }
+    cur = res.data; addToken(cur.t, cur.short); render();
+  }).catch(function () {
+    $('vLoading').innerHTML = '연결이 불안정해요.<br><button class="ghost small" style="width:auto;margin-top:10px" onclick="location.reload()">다시 시도</button>';
+  });
+}
+
+function showList() {
+  stopPoll();
+  $('listBody').innerHTML = myTokens().map(function (x) {
+    var d = new Date(x.d);
+    return '<a href="?t=' + x.t + '"><span><b>' + x.no + '번</b></span><span class="info">' + (d.getMonth() + 1) + '/' + d.getDate() + ' ' + d.getHours() + ':' + ('0' + d.getMinutes()).slice(-2) + ' ›</span></a>';
+  }).join('');
+  history.replaceState(null, '', location.pathname);
+  show('vList');
+}
+
+// ---- 접수 폼 ----
+function blankRcp() { return { same: false, name: '', phone: '', zip: '', addr: '', addr2: '', memo: '', boxes: 1 }; }
+
+function showForm() {
+  stopPoll(); editing = false;
+  var keep = cur ? { n: cur.senderName, p: cur.senderPhone } : null;   // 새 접수 때 보내는 분은 미리 채워 둠
+  $('senderName').value = keep ? keep.n : ''; $('senderPhone').value = keep ? keep.p : '';
+  rcps = [blankRcp()];
+  $('agree').checked = false; $('agreeRow').parentNode.classList.remove('hide');
+  $('btnSave').textContent = '접수하기';
+  $('btnBack').classList.add('hide');
+  cur = null; history.replaceState(null, '', location.pathname);
+  drawRcps(); show('vForm');
+}
+
+function editCur() {
+  if (!cur) return;
+  stopPoll(); editing = true;
+  $('senderName').value = cur.senderName; $('senderPhone').value = cur.senderPhone;
+  rcps = cur.recipients.filter(function (p) { return p.status !== '취소'; }).map(function (p) {
+    return { same: false, name: p.name, phone: p.phone, zip: p.zip, addr: p.addr, addr2: p.addr2, memo: p.memo || '', boxes: p.boxes };
+  });
+  $('agreeRow').parentNode.classList.add('hide');
+  $('btnSave').textContent = '수정 저장';
+  $('btnBack').classList.remove('hide');
+  drawRcps(); show('vForm');
+}
+
+function readRcps() {   // 화면 입력값 → rcps
+  rcps.forEach(function (p, i) {
+    ['name', 'phone', 'addr2', 'memo'].forEach(function (k) { var el = $('r' + i + '_' + k); if (el) p[k] = el.value; });
+  });
+}
+
+function drawRcps() {
+  var multi = rcps.length > 1;
+  $('rcpForms').innerHTML = rcps.map(function (p, i) {
+    return '<div class="card">' +
+      '<h2>받는 분' + (multi ? ' ' + (i + 1) : '') + (multi ? '<button class="link" onclick="removeRcp(' + i + ')">삭제</button>' : '') + '</h2>' +
+      '<label class="chk"><input type="checkbox" ' + (p.same ? 'checked' : '') + ' onchange="sameAsSender(' + i + ', this.checked)"> 보내는 분과 같아요</label>' +
+      '<label>이름</label><input id="r' + i + '_name" value="' + esc(p.name) + '">' +
+      '<label>연락처</label><input id="r' + i + '_phone" type="tel" inputmode="numeric" placeholder="010-0000-0000" value="' + esc(p.phone) + '">' +
+      '<label>주소</label>' +
+      '<div class="row"><input readonly placeholder="우편번호" style="flex:0 0 110px" value="' + esc(p.zip) + '" onclick="openPost(' + i + ')">' +
+      '<button class="ghost" onclick="openPost(' + i + ')">🔍 주소 검색</button></div>' +
+      '<input readonly placeholder="주소 검색을 눌러 주세요" style="margin-top:8px" value="' + esc(p.addr) + '" onclick="openPost(' + i + ')">' +
+      '<input id="r' + i + '_addr2" placeholder="상세주소 (동·호수)" style="margin-top:8px" value="' + esc(p.addr2) + '">' +
+      '<label>배송 메모 (선택)</label><input id="r' + i + '_memo" maxlength="60" placeholder="예: 문 앞에 놓아주세요" value="' + esc(p.memo) + '">' +
+      '<label>이 주소로 보낼 박스 수</label>' +
+      '<div class="stepper"><button onclick="stepBox(' + i + ',-1)">−</button><div class="val">' + p.boxes + '<span style="font-size:16px;font-weight:600"> 박스</span></div><button onclick="stepBox(' + i + ',1)">+</button></div>' +
+      '</div>';
+  }).join('');
+  var total = rcps.reduce(function (s, p) { return s + p.boxes; }, 0);
+  $('formTotal').innerHTML = '받는 곳 <b>' + rcps.length + '</b>곳 · 박스 총 <b>' + total + '</b>개';
+  $('formErr').style.display = 'none';
+}
+
+function addRecipient() {
+  readRcps();
+  if (rcps.length >= MAX_RCP) return alert('받는 곳은 ' + MAX_RCP + '곳까지 추가할 수 있어요.');
+  rcps.push(blankRcp()); drawRcps();
+  var cards = $('rcpForms').children; cards[cards.length - 1].scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function removeRcp(i) { readRcps(); if (!confirm('받는 분 ' + (i + 1) + '을(를) 삭제할까요?')) return; rcps.splice(i, 1); drawRcps(); }
+function stepBox(i, d) { readRcps(); rcps[i].boxes = Math.min(MAX_BOXES, Math.max(1, rcps[i].boxes + d)); drawRcps(); }
+function sameAsSender(i, on) {
+  readRcps(); rcps[i].same = on;
+  if (on) { rcps[i].name = $('senderName').value; rcps[i].phone = $('senderPhone').value; }
+  drawRcps();
+}
+
+// ---- 주소 검색 (다음 우편번호) ----
+function openPost(i) {
+  readRcps();
+  $('postLayer').style.display = 'block';
+  new daum.Postcode({
+    oncomplete: function (d) {
+      var a = d.roadAddress || d.jibunAddress;
+      if (d.buildingName && d.apartment === 'Y') a += ' (' + d.buildingName + ')';
+      rcps[i].zip = d.zonecode; rcps[i].addr = a;
+      closePost(); drawRcps(); var el = $('r' + i + '_addr2'); if (el) el.focus();
+    },
+    width: '100%', height: '100%'
+  }).embed($('postWrap'));
+}
+function closePost() { $('postLayer').style.display = 'none'; $('postWrap').innerHTML = ''; }
+
+// ---- 저장 ----
+function okPhone(v) { return /^0\d{8,10}$/.test(String(v).replace(/\D/g, '')); }
+function formErr(m) { var e = $('formErr'); e.textContent = m; e.style.display = 'block'; e.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+
+function save() {
+  readRcps();
+  var b = { senderName: $('senderName').value.trim(), senderPhone: $('senderPhone').value, recipients: [] };
+  if (!b.senderName) return formErr('보내는 분 이름을 입력해 주세요.');
+  if (!okPhone(b.senderPhone)) return formErr('보내는 분 연락처를 확인해 주세요.');
+  for (var i = 0; i < rcps.length; i++) {
+    var p = rcps[i], k = rcps.length > 1 ? (i + 1) + '번째 받는 분: ' : '받는 분 ';
+    if (!p.name.trim()) return formErr(k + '이름을 입력해 주세요.');
+    if (!okPhone(p.phone)) return formErr(k + '연락처를 확인해 주세요.');
+    if (!p.zip || !p.addr) return formErr(k + '🔍 주소 검색으로 주소를 선택해 주세요.');
+    if (!p.addr2.trim()) return formErr(k + '상세주소(동·호수)를 입력해 주세요. 없으면 "없음"이라고 적어 주세요.');
+    b.recipients.push({ name: p.name.trim(), phone: p.phone, zip: p.zip, addr: p.addr, addr2: p.addr2.trim(), memo: p.memo.trim(), boxes: p.boxes });
+  }
+  if (!editing && !$('agree').checked) return formErr('개인정보 수집·이용에 동의해 주세요.');
+  var total = rcps.reduce(function (s, p) { return s + p.boxes; }, 0);
+  if (!confirm('받는 곳 ' + rcps.length + '곳, 박스 총 ' + total + '개로 ' + (editing ? '수정할까요?' : '접수할까요?'))) return;
+
+  b.action = editing ? 'update' : 'create';
+  if (editing) b.t = cur.t;
+  var btn = $('btnSave'), label = btn.textContent;
+  btn.disabled = true; btn.textContent = '저장 중…'; $('formErr').style.display = 'none';
+  apiPost(b).then(function (res) {
+    if (!res.ok) throw { user: res.error };
+    cur = res.data; editing = false; addToken(cur.t, cur.short);
+    render();
+  }).catch(function (e) {
+    formErr(e && e.user ? e.user : netMsg(e));
+  }).then(function () { btn.disabled = false; btn.textContent = label; });
+}
+
+// ---- 상태 화면 ----
+function render() {
+  if (!cur) return init();
+  editing = false;
+  history.replaceState(null, '', '?t=' + cur.t);
+  $('sNo').textContent = cur.short; $('sNoFull').textContent = cur.no;
+  var s = cur.status, badge = $('sBadge');
+  var map = {
+    '송장요청': ['s-wait', '⏳ 송장 출력을 기다리고 있어요<br><span style="font-weight:400;font-size:15px">박스에 <b>' + cur.short + '번</b>을 크게 적어 두세요.<br>출력되면 이 화면에 바로 표시돼요.</span>'],
+    '출력중': ['s-wait', '🖨 송장을 출력하고 있어요. 곧 완료돼요!'],
+    '출력완료': ['s-ok', '✅ 송장 출력 완료!<br><span style="font-size:16px;font-weight:600">수령대에서 <u>' + cur.short + '번</u> 송장 ' + cur.totalBoxes + '장을 가져가<br>박스에 붙여 주세요</span>'],
+    '취소': ['s-gray', '택배 접수가 취소되었어요']
+  };
+  var m = map[s] || ['s-gray', s];
+  badge.className = 'status ' + m[0]; badge.innerHTML = m[1];
+  var idx = ['송장요청', '출력중', '출력완료'].indexOf(s);
+  ['st1', 'st2', 'st3'].forEach(function (id, i) { $(id).classList.toggle('on', i <= idx); });
+
+  $('editBtns').classList.toggle('hide', s !== '송장요청');
+  $('sTotal').textContent = '박스 ' + cur.totalBoxes + '개';
+  $('sSender').innerHTML = '보내는 분 <b>' + esc(cur.senderName) + '</b> ' + esc(cur.senderPhone);
+  $('sRcps').innerHTML = cur.recipients.map(function (p, i) {
+    return '<div class="rcp info">' + (cur.recipients.length > 1 ? (i + 1) + '. ' : '') +
+      '받는 분 <b>' + esc(p.name) + '</b> ' + esc(p.phone) + '<span class="tag">' + p.boxes + '박스</span>' +
+      (p.status === '취소' ? ' (취소)' : '') + '<br>(' + esc(p.zip) + ') ' + esc(p.addr) + ' ' + esc(p.addr2) +
+      (p.memo ? '<br>메모: ' + esc(p.memo) : '') + '</div>';
+  }).join('');
+  $('btnList').classList.toggle('hide', myTokens().length < 2);
+
+  if (lastStatus && lastStatus !== '출력완료' && s === '출력완료') notifyDone();
+  lastStatus = s;
+  show('vStatus');
+  if (s === '송장요청' || s === '출력중') startPoll(); else stopPoll();
+}
+
+function cancelCur() {
+  if (!confirm('택배 접수를 모두 취소할까요?')) return;
+  apiPost({ action: 'cancel', t: cur.t }).then(function (res) {
+    if (!res.ok) throw { user: res.error };
+    cur = res.data; render();
+  }).catch(function (e) { alert(e && e.user ? e.user : netMsg(e)); });
+}
+
+// ---- 상태 자동 새로고침 ----
+function startPoll() { stopPoll(); pollTimer = setInterval(refresh, POLL_MS); }
+function stopPoll() { if (pollTimer) clearInterval(pollTimer); pollTimer = null; }
+function refresh() {
+  if (!cur || document.hidden || editing || $('vStatus').classList.contains('hide')) return;
+  apiGet(cur.t).then(function (res) {
+    if (res.ok && JSON.stringify(res.data) !== JSON.stringify(cur)) { cur = res.data; render(); }
+  }).catch(function () {});
+}
+document.addEventListener('visibilitychange', function () { if (!document.hidden) refresh(); });
+
+function notifyDone() {
+  try { navigator.vibrate && navigator.vibrate([300, 150, 300, 150, 300]); } catch (e) {}
+  try {
+    var ctx = new (window.AudioContext || window.webkitAudioContext)(), o = ctx.createOscillator();
+    o.frequency.value = 880; o.connect(ctx.destination); o.start(); setTimeout(function () { o.stop(); }, 400);
+  } catch (e) {}
+}
+
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+init();
+</script>
+</body>
+</html>
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>애플카인드 사과따기 택배 접수</title>
+<style>
+  :root { --red:#c0392b; --red2:#fdecea; --ink:#222; --sub:#666; --line:#e3e3e3; --ok:#1e8449; --ok2:#e9f7ef; --wait:#b9770e; --wait2:#fef5e7; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#faf7f5; color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic",sans-serif; font-size:17px; line-height:1.5; }
+  header { background:var(--red); color:#fff; padding:16px; text-align:center; }
+  header h1 { margin:0; font-size:20px; }
+  header p { margin:4px 0 0; font-size:14px; opacity:.9; }
   main { max-width:520px; margin:0 auto; padding:16px; }
   .card { background:#fff; border-radius:14px; padding:18px; margin-bottom:14px; box-shadow:0 1px 3px rgba(0,0,0,.06); }
   h2 { font-size:17px; margin:0 0 12px; }
