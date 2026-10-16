@@ -146,6 +146,14 @@
       <h2>접수 내용 <span class="info" id="sTotal"></span></h2>
       <div class="info" id="sSender"></div>
       <div id="sRcps"></div>
+      <div id="cancelBox" class="hide" style="margin-top:12px">
+        <div class="err" style="display:block;margin:0 0 10px">취소할 받는 곳을 체크해 주세요.</div>
+        <button class="ghost small" onclick="checkAllCancel()">전체 선택</button>
+        <div class="row" style="margin-top:8px">
+          <button class="ghost small" onclick="exitCancel()">돌아가기</button>
+          <button class="primary small" onclick="cancelChecked()">선택한 곳 취소하기</button>
+        </div>
+      </div>
       <div class="row" style="margin-top:12px" id="editBtns">
         <button class="ghost small" onclick="editCur()">정보 수정</button>
         <button class="ghost small" style="color:var(--red);font-weight:700" onclick="cancelCur()">접수 취소</button>
@@ -425,12 +433,17 @@ function render() {
   var idx = ['송장요청', '출력중', '출력완료'].indexOf(s);
   ['st1', 'st2', 'st3'].forEach(function (id, i) { $(id).classList.toggle('on', i <= idx); });
 
-  $('editBtns').classList.toggle('hide', s !== '송장요청');
+  if (s !== '송장요청') cancelMode = false;
+  $('editBtns').classList.toggle('hide', s !== '송장요청' || cancelMode);
+  $('cancelBox').classList.toggle('hide', !cancelMode);
   $('sTotal').innerHTML = '박스 ' + cur.totalBoxes + '개 · ' + won(cur.totalFee) +
     (cur.paid ? ' <span class="tag" style="background:var(--ok2);color:var(--ok)">결제완료</span>' : '');
   $('sSender').innerHTML = '보내는 분 <b>' + esc(cur.senderName) + '</b> ' + esc(cur.senderPhone);
   $('sRcps').innerHTML = cur.recipients.map(function (p, i) {
-    return '<div class="rcp info">' + (cur.recipients.length > 1 ? (i + 1) + '. ' : '') +
+    var off = p.status === '취소';
+    return '<div class="rcp info"' + (off ? ' style="opacity:.5;text-decoration:line-through"' : '') + '>' +
+      (cancelMode && !off ? '<label class="chk" style="margin:0 0 4px"><input type="checkbox" class="cxl" value="' + p.seq + '"> 이 곳 취소</label>' : '') +
+      (cur.recipients.length > 1 ? (i + 1) + '. ' : '') +
       '받는 분 <b>' + esc(p.name) + '</b> ' + esc(p.phone) + '<span class="tag">' + p.boxes + '박스 · ' + won(p.fee) + '</span>' +
       (p.status === '취소' ? ' (취소)' : '') + '<br>(' + esc(p.zip) + ') ' + esc(p.addr) + ' ' + esc(p.addr2) +
       (p.memo ? '<br>메모: ' + esc(p.memo) : '') + '</div>';
@@ -442,15 +455,35 @@ function render() {
   if (s === '송장요청' || s === '출력중') startPoll(); else stopPoll();
 }
 
+// ---- 취소: 받는 곳이 여러 곳이면 체크해서 골라 취소 ----
+var cancelMode = false;
 function cancelCur() {
   if (inFlight) return;
-  if (!confirm(cur.short + '번 택배 접수를 모두 취소할까요?\n(받는 곳 중 일부만 빼려면 [정보 수정]에서 삭제하세요)')) return;
+  var live = cur.recipients.filter(function (p) { return p.status !== '취소'; });
+  if (live.length > 1) { cancelMode = true; render(); return; }
+  if (!confirm(cur.short + '번 택배 접수를 취소할까요?')) return;
+  doCancel(null);
+}
+function exitCancel() { cancelMode = false; render(); }
+function checkAllCancel() { Array.prototype.forEach.call(document.querySelectorAll('.cxl'), function (c) { c.checked = true; }); }
+function cancelChecked() {
+  if (inFlight) return;
+  var seqs = Array.prototype.filter.call(document.querySelectorAll('.cxl'), function (c) { return c.checked; })
+    .map(function (c) { return Number(c.value); });
+  if (!seqs.length) return alert('취소할 받는 곳을 체크해 주세요.');
+  var names = cur.recipients.filter(function (p) { return seqs.indexOf(p.seq) >= 0; }).map(function (p) { return p.name; });
+  if (!confirm(names.join(', ') + ' (' + seqs.length + '곳)\n선택한 곳을 취소할까요?')) return;
+  doCancel(seqs);
+}
+function doCancel(seqs) {
   busy(true, '취소 처리 중…');
-  apiPost({ action: 'cancel', t: cur.t }).then(function (res) {
+  apiPost({ action: 'cancel', t: cur.t, seqs: seqs }).then(function (res) {
     busy(false);
     if (!res.ok) throw { user: res.error };
+    cancelMode = false;
     cur = res.data; render();
-    showDone('접수 취소 완료', cur.short + '번 택배 접수가 취소되었어요.');
+    if (cur.status === '취소') showDone('접수 취소 완료', cur.short + '번 택배 접수가 모두 취소되었어요.');
+    else showDone('선택한 곳 취소 완료', (seqs ? seqs.length : 0) + '곳이 취소되었어요.<br>남은 박스 <b>' + cur.totalBoxes + '개</b> · 배송비 <b>' + won(cur.totalFee) + '</b>');
   }).catch(function (e) { busy(false); alert(e && e.user ? e.user : netMsg(e)); });
 }
 
@@ -458,7 +491,7 @@ function cancelCur() {
 function startPoll() { stopPoll(); pollTimer = setInterval(refresh, POLL_MS); }
 function stopPoll() { if (pollTimer) clearInterval(pollTimer); pollTimer = null; }
 function refresh() {
-  if (!cur || document.hidden || editing || $('vStatus').classList.contains('hide')) return;
+  if (!cur || document.hidden || editing || cancelMode || $('vStatus').classList.contains('hide')) return;
   apiGet(cur.t).then(function (res) {
     if (res.ok && JSON.stringify(res.data) !== JSON.stringify(cur)) { cur = res.data; render(); }
   }).catch(function () {});
