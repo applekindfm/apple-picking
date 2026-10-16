@@ -131,7 +131,6 @@
 
   <!-- 상태 화면 -->
   <div id="vStatus" class="hide">
-    <button id="btnBackList" class="ghost small hide" style="margin-bottom:14px;text-align:left" onclick="history.back()">‹ 조회 목록으로 (다른 접수 보기)</button>
     <div class="card big">
       <div class="lbl">접수번호</div>
       <div class="no" id="sNo">-</div>
@@ -162,6 +161,7 @@
     </div>
 
     <p class="info" style="text-align:center">다시 보려면 첫 화면 <b>내 접수 조회</b>에서<br>보내는 분 이름 + 휴대폰 뒷자리를 입력하세요.</p>
+    <button id="btnBackList" class="ghost hide" style="margin-bottom:8px" onclick="history.back()">‹ 조회 목록으로 (다른 접수 보기)</button>
     <button class="primary" onclick="goHome()">처음으로</button>
   </div>
 </main>
