@@ -326,7 +326,7 @@ function drawRcps() {
   var total = rcps.reduce(function (s, p) { return s + p.boxes; }, 0);
   var fee = rcps.reduce(function (s, p) { return s + feeOf(p); }, 0);
   $('formTotal').innerHTML = '받는 곳 <b>' + rcps.length + '</b>곳 · 박스 <b>' + total + '</b>개 · 배송비 <b>' + won(fee) + '</b>' +
-    '<br><span style="font-size:13px">배송비는 송장을 받으실 때 현장에서 결제해요 (카드·계좌이체)</span>';
+    '<br><span style="font-size:13px">배송비는 송장 받으실 때 현장에서 결제하세요. (카드, 현금)</span>';
   $('formErr').style.display = 'none';
 }
 
@@ -399,7 +399,7 @@ function save() {
     render();
     showDone(wasEdit ? '✅ 수정 완료' : '✅ 접수 완료',
       '접수번호<span class="num">' + cur.short + '</span>박스 ' + cur.totalBoxes + '개 · 배송비 <b>' + won(cur.totalFee) + '</b>' +
-      (wasEdit ? '<br>수정되었어요.' : '<br>박스에 <b>' + cur.short + '번</b>을 크게 적어 주세요.<br><span style="font-size:14px;color:#666">배송비는 송장을 받으실 때 결제해요.</span>'));
+      (wasEdit ? '<br>수정되었어요.' : '<br>박스에 <b>' + cur.short + '번</b>을 크게 적어 주세요.<br><span style="font-size:14px;color:#666">배송비는 송장 받으실 때 현장에서 결제하세요. (카드, 현금)</span>'));
   }).catch(function (e) {
     busy(false);
     formErr(e && e.user ? e.user : netMsg(e));
@@ -417,7 +417,7 @@ function render() {
     '송장요청': ['s-wait', '⏳ 송장 출력을 기다리고 있어요<br><span style="font-weight:400;font-size:15px">박스에 <b>' + cur.short + '번</b>을 크게 적어 두세요.<br>출력되면 이 화면에 바로 표시돼요.</span>'],
     '출력중': ['s-wait', '🖨 송장을 출력하고 있어요. 곧 완료돼요!'],
     '출력완료': ['s-ok', '✅ 송장 출력 완료!<br><span style="font-size:16px;font-weight:600">수령대에서 <u>' + cur.short + '번</u> 송장 ' + cur.totalBoxes + '장을 받아<br>박스에 붙여 주세요' +
-      (cur.paid ? '' : '<br>배송비 <u>' + won(cur.totalFee) + '</u> 결제를 준비해 주세요 (카드·계좌이체)') + '</span>'],
+      (cur.paid ? '' : '<br>배송비 <u>' + won(cur.totalFee) + '</u> 결제를 준비해 주세요 (카드, 현금)') + '</span>'],
     '취소': ['s-gray', '택배 접수가 취소되었어요']
   };
   var m = map[s] || ['s-gray', s];
