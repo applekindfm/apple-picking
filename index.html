@@ -55,6 +55,19 @@
   #postLayer .bar { display:flex; justify-content:space-between; align-items:center; padding:10px 14px; border-bottom:1px solid var(--line); }
   #postWrap { height:calc(100% - 50px); }
   .loading { text-align:center; color:var(--sub); padding:30px 0; }
+  /* 처리 중: 화면 전체를 덮어 중복 터치 차단 */
+  #busy { position:fixed; inset:0; background:rgba(255,255,255,.9); z-index:30; display:none; align-items:center; justify-content:center; flex-direction:column; gap:14px; touch-action:none; }
+  #busy.on { display:flex; }
+  #busy .spin { width:46px; height:46px; border:5px solid #f3d2ce; border-top-color:var(--red); border-radius:50%; animation:spin .8s linear infinite; }
+  #busy .txt { font-size:18px; font-weight:700; color:var(--red); }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  /* 완료 안내 */
+  #done { position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:25; display:none; align-items:center; justify-content:center; padding:24px; }
+  #done.on { display:flex; }
+  #done .box { background:#fff; border-radius:16px; padding:26px 22px 20px; width:100%; max-width:380px; text-align:center; }
+  #done .ttl { font-size:22px; font-weight:800; color:var(--ok); margin-bottom:10px; }
+  #done .msg { font-size:16px; color:var(--ink); margin-bottom:18px; line-height:1.6; }
+  #done .msg .num { display:block; font-size:56px; font-weight:800; color:var(--red); line-height:1.2; }
 </style>
 </head>
 <body>
@@ -139,6 +152,9 @@
   </div>
 </div>
 
+<div id="busy"><div class="spin"></div><div class="txt" id="busyTxt">처리 중…</div></div>
+<div id="done"><div class="box"><div class="ttl" id="doneTtl"></div><div class="msg" id="doneMsg"></div><button class="primary" onclick="closeDone()">확인</button></div></div>
+
 <script src="https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
 <script>
 // ===== 설정: Apps Script 웹 앱 주소 =====
@@ -170,6 +186,17 @@ function netMsg(e) {
     : '저장되지 않았어요. 잠시 후 다시 눌러 주세요.';
 }
 
+// ---- 처리 중 표시 (한 번 누르면 끝날 때까지 다른 터치 막기) ----
+var inFlight = false;
+function busy(on, msg) {
+  inFlight = on;
+  $('busyTxt').textContent = msg || '처리 중…';
+  $('busy').classList.toggle('on', on);
+}
+function showDone(title, html) { $('doneTtl').textContent = title; $('doneMsg').innerHTML = html; $('done').classList.add('on'); }
+function closeDone() { $('done').classList.remove('on'); }
+function newReqId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 10); }
+
 // ---- 화면 전환 ----
 function show(id) {
   ['vLoading', 'vHome', 'vForm', 'vStatus'].forEach(function (v) { $(v).classList.toggle('hide', v !== id); });
@@ -193,7 +220,8 @@ function findMine() {
   var nm = $('qName').value.trim(), p4 = $('qPhone').value.replace(/\D/g, '');
   var e = $('qErr'); e.style.display = 'none'; $('qList').innerHTML = '';
   if (!nm || p4.length !== 4) { e.textContent = '보내는 분 이름과 휴대폰 뒷자리 4자리를 입력해 주세요.'; e.style.display = 'block'; return; }
-  var btn = $('btnFind'); btn.disabled = true; btn.textContent = '조회 중…';
+  if (inFlight) return;
+  busy(true, '조회 중…');
   withTimeout(fetch(API_URL + '?action=find&name=' + encodeURIComponent(nm) + '&p=' + encodeURIComponent(p4)).then(function (r) { return r.json(); }))
     .then(function (res) {
       if (!res.ok) { e.textContent = res.error; e.style.display = 'block'; return; }
@@ -208,15 +236,18 @@ function findMine() {
       cur = res.data; lastStatus = null; render();
     })
     .catch(function () { e.textContent = '연결이 불안정해요. 잠시 후 다시 눌러 주세요.'; e.style.display = 'block'; })
-    .then(function () { btn.disabled = false; btn.textContent = '조회하기'; });
+    .then(function () { busy(false); });
 }
 
 function load(t) {
-  show('vLoading');
+  if (inFlight) return;
+  show('vLoading'); busy(true, '불러오는 중…');
   apiGet(t).then(function (res) {
+    busy(false);
     if (!res.ok) { alert(res.error || '접수 정보를 찾을 수 없어요.'); return goHome(); }
     cur = res.data; render();
   }).catch(function () {
+    busy(false);
     $('vLoading').innerHTML = '연결이 불안정해요.<br><button class="ghost small" style="width:auto;margin-top:10px" onclick="location.reload()">다시 시도</button>';
   });
 }
@@ -225,7 +256,7 @@ function load(t) {
 function blankRcp() { return { same: false, name: '', phone: '', zip: '', addr: '', addr2: '', memo: '', boxes: 1 }; }
 
 function showForm() {
-  stopPoll(); editing = false;
+  stopPoll(); editing = false; reqId = null;
   $('senderName').value = ''; $('senderPhone').value = '';
   rcps = [blankRcp()];
   $('agree').checked = false; $('agreeRow').parentNode.classList.remove('hide');
@@ -237,7 +268,7 @@ function showForm() {
 
 function editCur() {
   if (!cur) return;
-  stopPoll(); editing = true;
+  stopPoll(); editing = true; reqId = null;
   $('senderName').value = cur.senderName; $('senderPhone').value = cur.senderPhone;
   rcps = cur.recipients.filter(function (p) { return p.status !== '취소'; }).map(function (p) {
     return { same: false, name: p.name, phone: p.phone, zip: p.zip, addr: p.addr, addr2: p.addr2, memo: p.memo || '', boxes: p.boxes };
@@ -310,7 +341,9 @@ function closePost() { $('postLayer').style.display = 'none'; $('postWrap').inne
 function okPhone(v) { return /^0\d{8,10}$/.test(String(v).replace(/\D/g, '')); }
 function formErr(m) { var e = $('formErr'); e.textContent = m; e.style.display = 'block'; e.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
 
+var reqId = null;   // 같은 접수가 두 번 저장되지 않도록 요청마다 고유번호
 function save() {
+  if (inFlight) return;
   readRcps();
   var b = { senderName: $('senderName').value.trim(), senderPhone: $('senderPhone').value, recipients: [] };
   if (!b.senderName) return formErr('보내는 분 이름을 입력해 주세요.');
@@ -327,17 +360,26 @@ function save() {
   var total = rcps.reduce(function (s, p) { return s + p.boxes; }, 0);
   if (!confirm('받는 곳 ' + rcps.length + '곳, 박스 총 ' + total + '개로 ' + (editing ? '수정할까요?' : '접수할까요?'))) return;
 
+  var wasEdit = editing;
   b.action = editing ? 'update' : 'create';
   if (editing) b.t = cur.t;
-  var btn = $('btnSave'), label = btn.textContent;
-  btn.disabled = true; btn.textContent = '저장 중…'; $('formErr').style.display = 'none';
+  if (!reqId) reqId = newReqId();
+  b.reqId = reqId;
+  $('formErr').style.display = 'none';
+  busy(true, wasEdit ? '수정 처리 중…' : '접수 처리 중…');
   apiPost(b).then(function (res) {
+    busy(false);
     if (!res.ok) throw { user: res.error };
-    cur = res.data; editing = false;
+    reqId = null;
+    cur = res.data; editing = false; lastStatus = null;
     render();
+    showDone(wasEdit ? '✅ 수정 완료' : '✅ 접수 완료',
+      '접수번호<span class="num">' + cur.short + '</span>박스 ' + cur.totalBoxes + '개' +
+      (wasEdit ? '로 수정되었어요.' : ' 접수되었어요.<br>박스에 <b>' + cur.short + '번</b>을 크게 적어 주세요.'));
   }).catch(function (e) {
+    busy(false);
     formErr(e && e.user ? e.user : netMsg(e));
-  }).then(function () { btn.disabled = false; btn.textContent = label; });
+  });
 }
 
 // ---- 상태 화면 ----
@@ -375,11 +417,15 @@ function render() {
 }
 
 function cancelCur() {
+  if (inFlight) return;
   if (!confirm(cur.short + '번 택배 접수를 모두 취소할까요?\n(받는 곳 중 일부만 빼려면 [정보 수정]에서 삭제하세요)')) return;
+  busy(true, '취소 처리 중…');
   apiPost({ action: 'cancel', t: cur.t }).then(function (res) {
+    busy(false);
     if (!res.ok) throw { user: res.error };
     cur = res.data; render();
-  }).catch(function (e) { alert(e && e.user ? e.user : netMsg(e)); });
+    showDone('접수 취소 완료', cur.short + '번 택배 접수가 취소되었어요.');
+  }).catch(function (e) { busy(false); alert(e && e.user ? e.user : netMsg(e)); });
 }
 
 // ---- 상태 자동 새로고침 ----
