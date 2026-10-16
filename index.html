@@ -79,6 +79,14 @@
 <main>
   <div id="vLoading" class="loading">불러오는 중…</div>
 
+  <div id="vClosed" class="hide">
+    <div class="card" style="text-align:center;padding:36px 20px">
+      <div style="font-size:44px">🍎</div>
+      <div style="margin:10px 0 8px;font-size:20px;font-weight:800;line-height:1.4">사과따기 택배 접수가<br>종료되었습니다</div>
+      <p class="info" style="margin:0">올해 사과따기 행사에 함께해 주셔서 감사합니다.<br>내년에 다시 만나요!</p>
+    </div>
+  </div>
+
   <!-- 첫 화면 -->
   <div id="vHome" class="hide">
     <div class="card" style="text-align:center">
@@ -223,8 +231,11 @@ function closeDone() { $('done').classList.remove('on'); }
 function newReqId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 10); }
 
 // ---- 화면 전환 ----
+var CLOSE_AT = Date.parse('2026-10-24T18:00:00+09:00');   // 접수 종료 시각 (서울시간 10/24 오후 6시)
+function isClosed() { return Date.now() >= CLOSE_AT; }
 function show(id) {
-  ['vLoading', 'vHome', 'vFind', 'vForm', 'vStatus'].forEach(function (v) { $(v).classList.toggle('hide', v !== id); });
+  if (isClosed()) { stopPoll(); id = 'vClosed'; }
+  ['vLoading', 'vClosed', 'vHome', 'vFind', 'vForm', 'vStatus'].forEach(function (v) { $(v).classList.toggle('hide', v !== id); });
   window.scrollTo(0, 0);
 }
 
@@ -521,6 +532,7 @@ function notifyDone() {
 
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 
+setInterval(function () { if (isClosed() && $('vClosed').classList.contains('hide')) { busy(false); show('vClosed'); } }, 60000);
 init();
 </script>
 </body>
