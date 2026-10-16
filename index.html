@@ -162,6 +162,10 @@ var API_URL = 'https://script.google.com/macros/s/AKfycbzVg6NS59RMijBHCXnGQAOUqi
 var TIMEOUT_MS = 30000;
 var POLL_MS = 15000;
 var MAX_BOXES = 20, MAX_RCP = 10;
+var FEE = 3000, FEE_JEJU = 6000;   // 배송비(박스당), 제주도
+function isJeju(zip) { var n = Number(String(zip || '').replace(/\D/g, '')); return n >= 63000 && n <= 63644; }
+function feeOf(p) { return (isJeju(p.zip) ? FEE_JEJU : FEE) * p.boxes; }
+function won(n) { return Number(n || 0).toLocaleString('ko-KR') + '원'; }
 
 var cur = null, editing = false, pollTimer = null, lastStatus = null;
 var rcps = [];   // 폼의 받는 분 목록
@@ -300,10 +304,13 @@ function drawRcps() {
       '<input id="r' + i + '_addr2" placeholder="상세주소 (동·호수)" style="margin-top:8px" value="' + esc(p.addr2) + '">' +
       '<label>이 주소로 보낼 박스 수</label>' +
       '<div class="stepper"><button onclick="stepBox(' + i + ',-1)">−</button><div class="val">' + p.boxes + '<span style="font-size:16px;font-weight:600"> 박스</span></div><button onclick="stepBox(' + i + ',1)">+</button></div>' +
+      '<div class="info" style="margin-top:8px">배송비 <b>' + won(feeOf(p)) + '</b>' + (isJeju(p.zip) ? ' (제주도 박스당 6,000원)' : ' (박스당 3,000원)') + '</div>' +
       '</div>';
   }).join('');
   var total = rcps.reduce(function (s, p) { return s + p.boxes; }, 0);
-  $('formTotal').innerHTML = '받는 곳 <b>' + rcps.length + '</b>곳 · 박스 총 <b>' + total + '</b>개';
+  var fee = rcps.reduce(function (s, p) { return s + feeOf(p); }, 0);
+  $('formTotal').innerHTML = '받는 곳 <b>' + rcps.length + '</b>곳 · 박스 <b>' + total + '</b>개 · 배송비 <b>' + won(fee) + '</b>' +
+    '<br><span style="font-size:13px">배송비는 송장을 받으실 때 현장에서 결제해요 (카드·계좌이체)</span>';
   $('formErr').style.display = 'none';
 }
 
@@ -358,7 +365,8 @@ function save() {
   }
   if (!editing && !$('agree').checked) return formErr('개인정보 수집·이용에 동의해 주세요.');
   var total = rcps.reduce(function (s, p) { return s + p.boxes; }, 0);
-  if (!confirm('받는 곳 ' + rcps.length + '곳, 박스 총 ' + total + '개로 ' + (editing ? '수정할까요?' : '접수할까요?'))) return;
+  var fee = rcps.reduce(function (s, p) { return s + feeOf(p); }, 0);
+  if (!confirm('받는 곳 ' + rcps.length + '곳, 박스 ' + total + '개, 배송비 ' + won(fee) + '\n' + (editing ? '이대로 수정할까요?' : '이대로 접수할까요?'))) return;
 
   var wasEdit = editing;
   b.action = editing ? 'update' : 'create';
@@ -374,8 +382,8 @@ function save() {
     cur = res.data; editing = false; lastStatus = null;
     render();
     showDone(wasEdit ? '✅ 수정 완료' : '✅ 접수 완료',
-      '접수번호<span class="num">' + cur.short + '</span>박스 ' + cur.totalBoxes + '개' +
-      (wasEdit ? '로 수정되었어요.' : ' 접수되었어요.<br>박스에 <b>' + cur.short + '번</b>을 크게 적어 주세요.'));
+      '접수번호<span class="num">' + cur.short + '</span>박스 ' + cur.totalBoxes + '개 · 배송비 <b>' + won(cur.totalFee) + '</b>' +
+      (wasEdit ? '<br>수정되었어요.' : '<br>박스에 <b>' + cur.short + '번</b>을 크게 적어 주세요.<br><span style="font-size:14px;color:#666">배송비는 송장을 받으실 때 결제해요.</span>'));
   }).catch(function (e) {
     busy(false);
     formErr(e && e.user ? e.user : netMsg(e));
@@ -392,7 +400,8 @@ function render() {
   var map = {
     '송장요청': ['s-wait', '⏳ 송장 출력을 기다리고 있어요<br><span style="font-weight:400;font-size:15px">박스에 <b>' + cur.short + '번</b>을 크게 적어 두세요.<br>출력되면 이 화면에 바로 표시돼요.</span>'],
     '출력중': ['s-wait', '🖨 송장을 출력하고 있어요. 곧 완료돼요!'],
-    '출력완료': ['s-ok', '✅ 송장 출력 완료!<br><span style="font-size:16px;font-weight:600">수령대에서 <u>' + cur.short + '번</u> 송장 ' + cur.totalBoxes + '장을 가져가<br>박스에 붙여 주세요</span>'],
+    '출력완료': ['s-ok', '✅ 송장 출력 완료!<br><span style="font-size:16px;font-weight:600">수령대에서 <u>' + cur.short + '번</u> 송장 ' + cur.totalBoxes + '장을 받아<br>박스에 붙여 주세요' +
+      (cur.paid ? '' : '<br>배송비 <u>' + won(cur.totalFee) + '</u> 결제를 준비해 주세요 (카드·계좌이체)') + '</span>'],
     '취소': ['s-gray', '택배 접수가 취소되었어요']
   };
   var m = map[s] || ['s-gray', s];
@@ -401,11 +410,12 @@ function render() {
   ['st1', 'st2', 'st3'].forEach(function (id, i) { $(id).classList.toggle('on', i <= idx); });
 
   $('editBtns').classList.toggle('hide', s !== '송장요청');
-  $('sTotal').textContent = '박스 ' + cur.totalBoxes + '개';
+  $('sTotal').innerHTML = '박스 ' + cur.totalBoxes + '개 · ' + won(cur.totalFee) +
+    (cur.paid ? ' <span class="tag" style="background:var(--ok2);color:var(--ok)">결제완료</span>' : '');
   $('sSender').innerHTML = '보내는 분 <b>' + esc(cur.senderName) + '</b> ' + esc(cur.senderPhone);
   $('sRcps').innerHTML = cur.recipients.map(function (p, i) {
     return '<div class="rcp info">' + (cur.recipients.length > 1 ? (i + 1) + '. ' : '') +
-      '받는 분 <b>' + esc(p.name) + '</b> ' + esc(p.phone) + '<span class="tag">' + p.boxes + '박스</span>' +
+      '받는 분 <b>' + esc(p.name) + '</b> ' + esc(p.phone) + '<span class="tag">' + p.boxes + '박스 · ' + won(p.fee) + '</span>' +
       (p.status === '취소' ? ' (취소)' : '') + '<br>(' + esc(p.zip) + ') ' + esc(p.addr) + ' ' + esc(p.addr2) +
       (p.memo ? '<br>메모: ' + esc(p.memo) : '') + '</div>';
   }).join('');
