@@ -81,6 +81,19 @@
 
   <!-- 첫 화면 -->
   <div id="vHome" class="hide">
+    <div class="card" style="text-align:center">
+      <p class="info" style="margin:0 0 12px">이미 접수하셨나요?</p>
+      <button class="ghost" style="padding:18px;font-size:18px;font-weight:700" onclick="showFind()">🔍 내 접수 조회 · 수정 · 취소</button>
+    </div>
+    <div class="card" style="text-align:center">
+      <p class="info" style="margin:0 0 12px">처음 접수하시나요?</p>
+      <button class="primary" style="padding:18px;font-size:19px" onclick="showForm()">📦 택배 접수하기</button>
+    </div>
+  </div>
+
+  <!-- 내 접수 조회 -->
+  <div id="vFind" class="hide">
+    <button class="ghost small" style="margin-bottom:14px;text-align:left" onclick="goHome()">‹ 처음 화면으로</button>
     <div class="card">
       <h2>🔍 내 접수 조회</h2>
       <label>보내는 분 이름</label>
@@ -89,11 +102,7 @@
       <input id="qPhone" type="tel" inputmode="numeric" maxlength="4" placeholder="예: 5678">
       <div id="qErr" class="err" style="margin-top:12px"></div>
       <div id="qList"></div>
-      <button id="btnFind" class="ghost" style="margin-top:12px" onclick="findMine()">조회하기</button>
-    </div>
-    <div class="card" style="text-align:center">
-      <p class="info" style="margin:0 0 12px">처음 접수하시나요?</p>
-      <button class="primary" style="padding:18px;font-size:19px" onclick="showForm()">📦 택배 접수하기</button>
+      <button id="btnFind" class="primary" style="margin-top:12px" onclick="findMine()">조회하기</button>
     </div>
   </div>
 
@@ -206,7 +215,7 @@ function newReqId() { return Date.now().toString(36) + Math.random().toString(36
 
 // ---- 화면 전환 ----
 function show(id) {
-  ['vLoading', 'vHome', 'vForm', 'vStatus'].forEach(function (v) { $(v).classList.toggle('hide', v !== id); });
+  ['vLoading', 'vHome', 'vFind', 'vForm', 'vStatus'].forEach(function (v) { $(v).classList.toggle('hide', v !== id); });
   window.scrollTo(0, 0);
 }
 
@@ -219,8 +228,12 @@ function init() {
 function goHome() {
   stopPoll(); cur = null; editing = false; lastStatus = null;
   history.replaceState(null, '', location.pathname);
-  $('qName').value = ''; $('qPhone').value = ''; $('qErr').style.display = 'none'; $('qList').innerHTML = '';
   show('vHome');
+}
+
+function showFind() {
+  $('qName').value = ''; $('qPhone').value = ''; $('qErr').style.display = 'none'; $('qList').innerHTML = '';
+  show('vFind'); $('qName').focus();
 }
 
 function findMine() {
