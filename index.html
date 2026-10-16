@@ -66,11 +66,18 @@
 <main>
   <div id="vLoading" class="loading">불러오는 중…</div>
 
-  <!-- 내 접수 목록 -->
-  <div id="vList" class="card hide">
-    <h2>내 접수 내역</h2>
-    <div id="listBody" class="list"></div>
-    <button class="ghost small" style="margin-top:12px" onclick="showForm()">+ 새로 접수하기</button>
+  <!-- 첫 화면 -->
+  <div id="vHome" class="hide">
+    <button class="primary" style="padding:20px;font-size:19px;margin-bottom:18px" onclick="showForm()">📦 택배 접수하기</button>
+    <div class="card">
+      <h2>🔍 내 접수 조회</h2>
+      <label>접수번호</label>
+      <input id="qNo" type="tel" inputmode="numeric" placeholder="예: 23">
+      <label>보내는 분 휴대폰 뒷자리 4자리</label>
+      <input id="qPhone" type="tel" inputmode="numeric" maxlength="4" placeholder="예: 5678">
+      <div id="qErr" class="err" style="margin-top:12px"></div>
+      <button id="btnFind" class="ghost" style="margin-top:12px" onclick="findMine()">조회하기</button>
+    </div>
   </div>
 
   <!-- 접수 / 수정 폼 -->
@@ -93,6 +100,7 @@
     <div class="total" id="formTotal"></div>
     <button id="btnSave" class="primary" onclick="save()">접수하기</button>
     <button id="btnBack" class="ghost hide" style="margin-top:8px" onclick="render()">수정 취소</button>
+    <button id="btnHome" class="ghost" style="margin-top:8px" onclick="goHome()">처음으로</button>
   </div>
 
   <!-- 상태 화면 -->
@@ -114,12 +122,12 @@
       <div id="sRcps"></div>
       <div class="row" style="margin-top:12px" id="editBtns">
         <button class="ghost small" onclick="editCur()">정보 수정</button>
-        <button class="ghost small" onclick="cancelCur()">택배 안 보낼게요</button>
+        <button class="ghost small" style="color:var(--red);font-weight:700" onclick="cancelCur()">접수 취소</button>
       </div>
     </div>
 
-    <button class="ghost" onclick="showForm()">+ 새로 접수하기</button>
-    <button class="ghost small hide" id="btnList" style="margin-top:8px" onclick="showList()">내 접수 내역 보기</button>
+    <p class="info" style="text-align:center">다시 보려면 첫 화면 <b>내 접수 조회</b>에서<br>접수번호 <b id="sNo3"></b> + 보내는 분 휴대폰 뒷자리를 입력하세요.</p>
+    <button class="primary" onclick="goHome()">처음으로</button>
   </div>
 </main>
 
@@ -142,15 +150,8 @@ var cur = null, editing = false, pollTimer = null, lastStatus = null;
 var rcps = [];   // 폼의 받는 분 목록
 var $ = function (id) { return document.getElementById(id); };
 
-// ---- 이 폰에 내 접수 보관 ----
-function myTokens() { try { return JSON.parse(localStorage.getItem('ak_pick_tokens') || '[]'); } catch (e) { return []; } }
-function addToken(t, no) {
-  try {
-    var a = myTokens().filter(function (x) { return x.t !== t; });
-    a.unshift({ t: t, no: no, d: Date.now() });
-    localStorage.setItem('ak_pick_tokens', JSON.stringify(a.slice(0, 20)));
-  } catch (e) {}
-}
+// 공용 링크라 기기에 접수 내역을 저장하지 않음 (조회는 접수번호 + 휴대폰 뒷자리)
+try { localStorage.removeItem('ak_pick_tokens'); } catch (e) {}
 
 // ---- 통신 (30초 무응답이면 실패 안내) ----
 function withTimeout(p) {
@@ -170,35 +171,45 @@ function netMsg(e) {
 
 // ---- 화면 전환 ----
 function show(id) {
-  ['vLoading', 'vList', 'vForm', 'vStatus'].forEach(function (v) { $(v).classList.toggle('hide', v !== id); });
+  ['vLoading', 'vHome', 'vForm', 'vStatus'].forEach(function (v) { $(v).classList.toggle('hide', v !== id); });
   window.scrollTo(0, 0);
 }
 
 function init() {
   var t = new URLSearchParams(location.search).get('t');
   if (t) return load(t);
-  if (myTokens().length) return showList();
-  showForm();
+  goHome();
+}
+
+function goHome() {
+  stopPoll(); cur = null; editing = false; lastStatus = null;
+  history.replaceState(null, '', location.pathname);
+  $('qNo').value = ''; $('qPhone').value = ''; $('qErr').style.display = 'none';
+  show('vHome');
+}
+
+function findMine() {
+  var no = $('qNo').value.replace(/\D/g, ''), p4 = $('qPhone').value.replace(/\D/g, '');
+  var e = $('qErr'); e.style.display = 'none';
+  if (!no || p4.length !== 4) { e.textContent = '접수번호와 휴대폰 뒷자리 4자리를 입력해 주세요.'; e.style.display = 'block'; return; }
+  var btn = $('btnFind'); btn.disabled = true; btn.textContent = '조회 중…';
+  withTimeout(fetch(API_URL + '?action=find&no=' + encodeURIComponent(no) + '&p=' + encodeURIComponent(p4)).then(function (r) { return r.json(); }))
+    .then(function (res) {
+      if (!res.ok) { e.textContent = res.error; e.style.display = 'block'; return; }
+      cur = res.data; lastStatus = null; render();
+    })
+    .catch(function () { e.textContent = '연결이 불안정해요. 잠시 후 다시 눌러 주세요.'; e.style.display = 'block'; })
+    .then(function () { btn.disabled = false; btn.textContent = '조회하기'; });
 }
 
 function load(t) {
   show('vLoading');
   apiGet(t).then(function (res) {
-    if (!res.ok) { alert(res.error || '접수 정보를 찾을 수 없어요.'); history.replaceState(null, '', location.pathname); return showForm(); }
-    cur = res.data; addToken(cur.t, cur.short); render();
+    if (!res.ok) { alert(res.error || '접수 정보를 찾을 수 없어요.'); return goHome(); }
+    cur = res.data; render();
   }).catch(function () {
     $('vLoading').innerHTML = '연결이 불안정해요.<br><button class="ghost small" style="width:auto;margin-top:10px" onclick="location.reload()">다시 시도</button>';
   });
-}
-
-function showList() {
-  stopPoll();
-  $('listBody').innerHTML = myTokens().map(function (x) {
-    var d = new Date(x.d);
-    return '<a href="?t=' + x.t + '"><span><b>' + x.no + '번</b></span><span class="info">' + (d.getMonth() + 1) + '/' + d.getDate() + ' ' + d.getHours() + ':' + ('0' + d.getMinutes()).slice(-2) + ' ›</span></a>';
-  }).join('');
-  history.replaceState(null, '', location.pathname);
-  show('vList');
 }
 
 // ---- 접수 폼 ----
@@ -206,12 +217,11 @@ function blankRcp() { return { same: false, name: '', phone: '', zip: '', addr: 
 
 function showForm() {
   stopPoll(); editing = false;
-  var keep = cur ? { n: cur.senderName, p: cur.senderPhone } : null;   // 새 접수 때 보내는 분은 미리 채워 둠
-  $('senderName').value = keep ? keep.n : ''; $('senderPhone').value = keep ? keep.p : '';
+  $('senderName').value = ''; $('senderPhone').value = '';
   rcps = [blankRcp()];
   $('agree').checked = false; $('agreeRow').parentNode.classList.remove('hide');
   $('btnSave').textContent = '접수하기';
-  $('btnBack').classList.add('hide');
+  $('btnBack').classList.add('hide'); $('btnHome').classList.remove('hide');
   cur = null; history.replaceState(null, '', location.pathname);
   drawRcps(); show('vForm');
 }
@@ -225,7 +235,7 @@ function editCur() {
   });
   $('agreeRow').parentNode.classList.add('hide');
   $('btnSave').textContent = '수정 저장';
-  $('btnBack').classList.remove('hide');
+  $('btnBack').classList.remove('hide'); $('btnHome').classList.add('hide');
   drawRcps(); show('vForm');
 }
 
@@ -315,7 +325,7 @@ function save() {
   btn.disabled = true; btn.textContent = '저장 중…'; $('formErr').style.display = 'none';
   apiPost(b).then(function (res) {
     if (!res.ok) throw { user: res.error };
-    cur = res.data; editing = false; addToken(cur.t, cur.short);
+    cur = res.data; editing = false;
     render();
   }).catch(function (e) {
     formErr(e && e.user ? e.user : netMsg(e));
@@ -327,7 +337,7 @@ function render() {
   if (!cur) return init();
   editing = false;
   history.replaceState(null, '', '?t=' + cur.t);
-  $('sNo').textContent = cur.short; $('sNoFull').textContent = cur.no;
+  $('sNo').textContent = cur.short; $('sNoFull').textContent = cur.no; $('sNo3').textContent = cur.short;
   var s = cur.status, badge = $('sBadge');
   var map = {
     '송장요청': ['s-wait', '⏳ 송장 출력을 기다리고 있어요<br><span style="font-weight:400;font-size:15px">박스에 <b>' + cur.short + '번</b>을 크게 적어 두세요.<br>출력되면 이 화면에 바로 표시돼요.</span>'],
@@ -349,7 +359,6 @@ function render() {
       (p.status === '취소' ? ' (취소)' : '') + '<br>(' + esc(p.zip) + ') ' + esc(p.addr) + ' ' + esc(p.addr2) +
       (p.memo ? '<br>메모: ' + esc(p.memo) : '') + '</div>';
   }).join('');
-  $('btnList').classList.toggle('hide', myTokens().length < 2);
 
   if (lastStatus && lastStatus !== '출력완료' && s === '출력완료') notifyDone();
   lastStatus = s;
@@ -358,7 +367,7 @@ function render() {
 }
 
 function cancelCur() {
-  if (!confirm('택배 접수를 모두 취소할까요?')) return;
+  if (!confirm(cur.short + '번 택배 접수를 모두 취소할까요?\n(받는 곳 중 일부만 빼려면 [정보 수정]에서 삭제하세요)')) return;
   apiPost({ action: 'cancel', t: cur.t }).then(function (res) {
     if (!res.ok) throw { user: res.error };
     cur = res.data; render();
