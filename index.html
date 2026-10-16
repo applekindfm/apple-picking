@@ -444,7 +444,7 @@ function render() {
   var m = map[s] || ['s-gray', s];
   badge.className = 'status ' + m[0]; badge.innerHTML = m[1];
   var idx = ['송장요청', '출력중', '출력완료'].indexOf(s);
-  ['st1', 'st2', 'st3'].forEach(function (id, i) { $(id).classList.toggle('on', i <= idx); });
+  ['st1', 'st2', 'st3'].forEach(function (id, i) { $(id).classList.toggle('on', i === idx); });
 
   if (s !== '송장요청') cancelMode = false;
   $('editBtns').classList.toggle('hide', s !== '송장요청' || cancelMode);
