@@ -430,11 +430,15 @@ function render() {
   $('sNo').textContent = cur.short; $('sNoFull').textContent = cur.no;
   $('btnBackList').classList.toggle('hide', !fromList);
   var s = cur.status, badge = $('sBadge');
+  // 결제 안내 (결제 전에만 표시)
+  var feeBox = cur.paid ? '' :
+    '<div style="margin-top:12px;padding:10px 8px;background:#fff;border-radius:10px;color:#222;font-weight:400;font-size:15px">' +
+    '💳 총 결제금액 <b style="font-size:20px;color:var(--red)">' + won(cur.totalFee) + '</b><br>' +
+    '송장 수령 시 <b>택배접수처</b>에서 결제해 주시면 됩니다. (카드, 현금)</div>';
   var map = {
-    '송장요청': ['s-wait', '⏳ 송장 출력을 기다리고 있어요<br><span style="font-weight:400;font-size:15px">박스에 <b>' + cur.short + '번</b>을 크게 적어 두세요.<br>출력되면 이 화면에 바로 표시돼요.</span>'],
-    '출력중': ['s-wait', '🖨 송장을 출력하고 있어요. 곧 완료돼요!'],
-    '출력완료': ['s-ok', '✅ 송장 출력 완료!<br><span style="font-size:16px;font-weight:600">수령대에서 <u>' + cur.short + '번</u> 송장 ' + cur.totalBoxes + '장을 받아<br>박스에 붙여 주세요' +
-      (cur.paid ? '' : '<br>배송비 <u>' + won(cur.totalFee) + '</u> 결제를 준비해 주세요 (카드, 현금)') + '</span>'],
+    '송장요청': ['s-wait', '⏳ 송장 출력을 기다리고 있어요<br><span style="font-weight:400;font-size:15px">박스에 <b>' + cur.short + '번</b>을 크게 적어 두세요.<br>출력되면 이 화면에 바로 표시돼요.</span>' + feeBox],
+    '출력중': ['s-wait', '🖨 송장을 출력하고 있어요. 곧 완료돼요!' + feeBox],
+    '출력완료': ['s-ok', '✅ 송장 출력 완료!<br><span style="font-size:16px;font-weight:600">택배접수처에서 <u>' + cur.short + '번</u> 송장 ' + cur.totalBoxes + '장을 받아<br>박스에 붙여 주세요</span>' + feeBox],
     '취소': ['s-gray', '택배 접수가 취소되었어요']
   };
   var m = map[s] || ['s-gray', s];
