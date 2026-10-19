@@ -475,7 +475,7 @@ function render() {
   var map = {
     '송장요청': ['s-wait', '⏳ 송장 출력을 기다리고 있어요<br><span style="font-weight:400;font-size:15px">박스에 <b>' + cur.short + '번</b>을 크게 적어 두세요.<br>출력되면 이 화면에 바로 표시돼요.</span>' + feeBox],
     '출력중': ['s-wait', '🖨 송장을 출력하고 있어요.<br><span style="font-size:15px;font-weight:400">곧 완료돼요!</span>' + feeBox],
-    '출력완료': ['s-ok', '✅ 송장 출력 완료!<br><span style="font-size:16px;font-weight:600">택배접수처에서 <u>' + cur.short + '번</u> 송장 ' + cur.totalBoxes + '장을 받아<br>박스에 붙여 주세요</span>' + feeBox],
+    '출력완료': ['s-ok', '✅ 송장 출력 완료!<br><span style="font-size:16px;font-weight:600">택배접수처에 <u>' + cur.short + '번</u>이라고 말씀해 주세요<br>배송비 결제 후 송장 ' + cur.totalBoxes + '장을 드려요</span>' + feeBox],
     '취소': ['s-gray', '택배 접수가 취소되었어요']
   };
   var m = map[s] || ['s-gray', s];
