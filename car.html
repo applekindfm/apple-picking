@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>사과따기 차량번호 등록 | 애플카인드</title>
+<meta name="robots" content="noindex">
+<style>
+  :root {
+    --red: #c8102e; --red-dark: #9e0c24; --ink: #222; --sub: #666; --line: #e3e3e3;
+    --bg: #faf7f2; --card: #fff; --ok: #1b7f3b; --warn: #b3261e;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", sans-serif;
+         background: var(--bg); color: var(--ink); font-size: 17px; line-height: 1.55; -webkit-text-size-adjust: 100%; }
+  main { max-width: 480px; margin: 0 auto; padding: 24px 16px 48px; }
+  header { text-align: center; margin-bottom: 20px; }
+  header .logo { font-size: 40px; line-height: 1; }
+  header h1 { font-size: 22px; margin: 8px 0 4px; }
+  header p { margin: 0; color: var(--sub); font-size: 15px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 20px 18px; margin-bottom: 14px; }
+  .hello { font-size: 18px; font-weight: 700; margin: 0 0 6px; }
+  .sessions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { background: #fdecef; color: var(--red-dark); border-radius: 999px; padding: 3px 12px; font-size: 15px; font-weight: 600; }
+  label.ttl { display: block; font-weight: 700; margin-bottom: 8px; }
+  .plate { display: flex; gap: 8px; margin-bottom: 8px; }
+  .plate input { flex: 1; font-size: 20px; padding: 12px 14px; border: 1.5px solid #cfcfcf; border-radius: 10px;
+                 letter-spacing: 1px; min-width: 0; }
+  .plate input:focus { outline: none; border-color: var(--red); }
+  .plate input.err { border-color: var(--warn); background: #fff5f5; }
+  .plate button.del { flex: none; width: 48px; border: 1px solid var(--line); background: #f6f6f6; border-radius: 10px; font-size: 20px; color: var(--sub); }
+  .hint { font-size: 14px; color: var(--sub); margin: 2px 0 10px; }
+  .add { width: 100%; padding: 11px; border: 1.5px dashed #bbb; background: transparent; border-radius: 10px; font-size: 16px; color: var(--sub); }
+  .nocar { display: flex; align-items: center; gap: 10px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 16px; }
+  .nocar input { width: 22px; height: 22px; accent-color: var(--red); }
+  .msg { font-size: 15px; color: var(--warn); margin-top: 10px; min-height: 1em; }
+  .submit { width: 100%; padding: 16px; border: 0; border-radius: 12px; background: var(--red); color: #fff; font-size: 18px; font-weight: 700; }
+  .submit:disabled { background: #d9a3ad; }
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.5); border-top-color: #fff; border-radius: 50%;
+             animation: spin .8s linear infinite; vertical-align: -2px; margin-right: 8px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .center { text-align: center; }
+  .big { font-size: 46px; line-height: 1; margin-bottom: 8px; }
+  .done-car { font-size: 22px; font-weight: 800; margin: 10px 0; letter-spacing: 1px; }
+  .link { background: none; border: 0; color: var(--red); font-size: 16px; text-decoration: underline; padding: 8px; }
+  footer { text-align: center; color: #999; font-size: 13px; margin-top: 24px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="logo">🍎</div>
+    <h1>사과따기 체험 차량번호 등록</h1>
+    <p>원활한 주차 안내를 위해<br>차량번호를 알려주세요.</p>
+  </header>
+
+  <!-- 불러오는 중 -->
+  <section id="v-loading" class="card center">
+    <p>정보를 불러오는 중입니다…</p>
+  </section>
+
+  <!-- 오류 -->
+  <section id="v-error" class="card center" hidden>
+    <div class="big">⚠️</div>
+    <p id="error-text">링크 정보를 찾을 수 없습니다.</p>
+    <button class="link" id="retry-load" hidden>다시 시도</button>
+  </section>
+
+  <!-- 마감 -->
+  <section id="v-closed" class="card center" hidden>
+    <div class="big">🍎</div>
+    <p><b>차량번호 등록이 마감되었습니다.</b><br>방문해 주셔서 감사합니다.</p>
+  </section>
+
+  <!-- 입력 -->
+  <section id="v-form" hidden>
+    <div class="card">
+      <p class="hello"><span id="name"></span>님, 안녕하세요.</p>
+      <div>신청하신 회차</div>
+      <div class="sessions" id="sessions"></div>
+    </div>
+
+    <div class="card">
+      <label class="ttl" for="p0">차량번호</label>
+      <div id="plates"></div>
+      <p class="hint">예: 12가3456 · 123가4567 · 강원12가3456</p>
+      <button type="button" class="add" id="add">+ 차량 추가 (일행 차량이 더 있을 때)</button>
+      <label class="nocar"><input type="checkbox" id="nocar"> 차량 없이 방문해요 (대중교통·동승 등)</label>
+      <div class="msg" id="form-msg"></div>
+    </div>
+
+    <button class="submit" id="submit">등록하기</button>
+  </section>
+
+  <!-- 완료 -->
+  <section id="v-done" class="card center" hidden>
+    <div class="big">✅</div>
+    <p><b>등록이 완료되었습니다.</b></p>
+    <div class="done-car" id="done-car"></div>
+    <p class="hint">변경이 필요하면 이 링크에서 다시 등록하시면 됩니다.</p>
+    <button class="link" id="edit">차량번호 수정하기</button>
+  </section>
+
+  <footer>애플카인드</footer>
+</main>
+
+<script>
+  // Apps Script 웹앱 URL (배포 후 붙여넣기)
+  const API_URL = 'https://script.google.com/macros/s/AKfycby_X-PueWYNZaIN3-cMqqCQf56WHjdBvCRQlRoDmkSniNDPUB-gdprhMAfrLWJC7J3ycA/exec';
+  const MAX_CARS = 3;
+  const TIMEOUT_MS = 30000;
+  const PLATE_RE = /^([가-힣]{2})?\d{2,3}[가-힣]\d{4}$/;
+
+  const $ = id => document.getElementById(id);
+  const views = ['v-loading', 'v-error', 'v-closed', 'v-form', 'v-done'];
+  function show(id) { views.forEach(v => $(v).hidden = v !== id); window.scrollTo(0, 0); }
+
+  const key = new URLSearchParams(location.search).get('k') || '';
+  let current = '';
+
+  function clean(v) { return String(v || '').replace(/[\s-]/g, ''); }
+
+  function fetchTimeout(url, opts) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+    return fetch(url, Object.assign({}, opts, { signal: ctrl.signal, redirect: 'follow' }))
+      .then(r => r.json()).finally(() => clearTimeout(t));
+  }
+
+  function addPlate(value) {
+    const box = $('plates');
+    if (box.children.length >= MAX_CARS) return;
+    const i = box.children.length;
+    const row = document.createElement('div');
+    row.className = 'plate';
+    const inp = document.createElement('input');
+    inp.type = 'text'; inp.id = 'p' + i; inp.placeholder = '12가3456';
+    inp.autocomplete = 'off'; inp.value = value || '';
+    inp.setAttribute('aria-label', '차량번호 ' + (i + 1));
+    inp.addEventListener('input', () => { inp.classList.remove('err'); $('form-msg').textContent = ''; });
+    row.appendChild(inp);
+    if (i > 0) {
+      const del = document.createElement('button');
+      del.type = 'button'; del.className = 'del'; del.textContent = '×'; del.setAttribute('aria-label', '삭제');
+      del.onclick = () => { row.remove(); updateAdd(); };
+      row.appendChild(del);
+    }
+    box.appendChild(row);
+    updateAdd();
+  }
+  function updateAdd() { $('add').hidden = $('nocar').checked || $('plates').children.length >= MAX_CARS; }
+
+  function fillForm(car) {
+    $('plates').innerHTML = '';
+    $('nocar').checked = car === '차량없음';
+    const cars = (car && car !== '차량없음') ? car.split(',').map(s => s.trim()).filter(Boolean) : [];
+    if (!cars.length) addPlate('');
+    cars.slice(0, MAX_CARS).forEach(c => addPlate(c));
+    toggleNocar();
+  }
+  function toggleNocar() {
+    const off = $('nocar').checked;
+    $('plates').querySelectorAll('input,button').forEach(el => el.disabled = off);
+    $('plates').style.opacity = off ? .4 : 1;
+    $('form-msg').textContent = '';
+    updateAdd();
+  }
+
+  function load() {
+    if (!key) { $('error-text').textContent = '링크가 올바르지 않습니다. 문자로 받으신 링크를 다시 눌러주세요.'; show('v-error'); return; }
+    show('v-loading');
+    fetchTimeout(API_URL + '?k=' + encodeURIComponent(key))
+      .then(d => {
+        if (!d.ok) {
+          $('error-text').textContent = d.error === 'notfound'
+            ? '신청 내역을 찾을 수 없습니다. 문자로 받으신 링크를 다시 확인해 주세요.'
+            : '일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.';
+          $('retry-load').hidden = d.error === 'notfound';
+          show('v-error'); return;
+        }
+        if (d.closed) { show('v-closed'); return; }
+        $('name').textContent = d.name;
+        $('sessions').innerHTML = '';
+        d.sessions.forEach(s => { const c = document.createElement('span'); c.className = 'chip'; c.textContent = s; $('sessions').appendChild(c); });
+        current = d.car || '';
+        if (current) { $('done-car').textContent = current === '차량없음' ? '차량 없이 방문' : current; show('v-done'); }
+        else { fillForm(''); show('v-form'); }
+      })
+      .catch(() => {
+        $('error-text').textContent = '연결이 원활하지 않습니다. 잠시 후 다시 시도해 주세요.';
+        $('retry-load').hidden = false; show('v-error');
+      });
+  }
+
+  let busy = false;
+  function submit() {
+    if (busy) return;
+    const msg = $('form-msg');
+    const nocar = $('nocar').checked;
+    let cars = [];
+    if (!nocar) {
+      const inputs = [...$('plates').querySelectorAll('input')];
+      let bad = false;
+      inputs.forEach(inp => {
+        const v = clean(inp.value);
+        if (!v) return;
+        if (!PLATE_RE.test(v)) { inp.classList.add('err'); bad = true; } else cars.push(v);
+      });
+      if (bad) { msg.textContent = '차량번호 형식을 확인해 주세요. (예: 12가3456)'; return; }
+      if (!cars.length) { msg.textContent = '차량번호를 입력하거나 "차량 없이 방문해요"를 선택해 주세요.'; inputs[0] && inputs[0].focus(); return; }
+      cars = [...new Set(cars)];
+    }
+
+    busy = true;
+    const btn = $('submit');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>저장 중입니다…';
+    msg.textContent = '';
+
+    fetchTimeout(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ k: key, cars: cars, nocar: nocar })
+    })
+      .then(d => {
+        if (d.ok) {
+          current = d.car;
+          $('done-car').textContent = d.car === '차량없음' ? '차량 없이 방문' : d.car;
+          show('v-done');
+        } else if (d.error === 'closed') {
+          show('v-closed');
+        } else if (d.error === 'badplate') {
+          msg.textContent = '차량번호 형식을 확인해 주세요. (예: 12가3456)';
+        } else if (d.error === 'notfound') {
+          msg.textContent = '신청 내역을 찾을 수 없습니다. 문자로 받으신 링크를 다시 확인해 주세요.';
+        } else {
+          msg.textContent = '저장하지 못했습니다. 잠시 후 다시 [등록하기]를 눌러주세요.';
+        }
+      })
+      .catch(() => { msg.textContent = '응답이 없어 저장되지 않았을 수 있습니다. 다시 [등록하기]를 눌러주세요.'; })
+      .finally(() => { busy = false; btn.disabled = false; btn.textContent = '등록하기'; });
+  }
+
+  $('add').onclick = () => addPlate('');
+  $('nocar').onchange = toggleNocar;
+  $('submit').onclick = submit;
+  $('edit').onclick = () => { fillForm(current); show('v-form'); };
+  $('retry-load').onclick = load;
+  load();
+</script>
+</body>
+</html>
