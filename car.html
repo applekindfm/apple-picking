@@ -51,6 +51,8 @@
   .big { font-size: 46px; line-height: 1; margin-bottom: 8px; }
   .sess-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
   .sess-title .chip { font-size: 17px; padding: 4px 14px; }
+  .sess-title .who { flex: 1; margin-left: 8px; font-weight: 700; }
+  .done-row .who { display: block; font-size: 14px; color: var(--sub); margin-top: 4px; }
   .copy { background: none; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 14px; color: var(--sub); }
   .done-row { display: flex; justify-content: space-between; gap: 10px; padding: 10px 4px; border-top: 1px solid var(--line); text-align: left; }
   .done-row:first-child { border-top: 0; }
@@ -190,6 +192,7 @@
     const head = document.createElement('div'); head.className = 'sess-title';
     const chip = document.createElement('span'); chip.className = 'chip'; chip.textContent = sess.session;
     head.appendChild(chip);
+    if (sess.name) { const who = document.createElement('span'); who.className = 'who'; who.textContent = sess.name + '님'; head.appendChild(who); }
     if (idx > 0) {
       const cp = document.createElement('button'); cp.type = 'button'; cp.className = 'copy'; cp.textContent = '위 회차와 같은 차량';
       cp.onclick = () => copyFrom(idx - 1, card);
@@ -266,7 +269,9 @@
     const box = $('done-list'); box.innerHTML = '';
     list.forEach(x => {
       const r = document.createElement('div'); r.className = 'done-row';
-      const a = document.createElement('span'); a.className = 'chip'; a.textContent = x.session;
+      const a = document.createElement('div');
+      const c = document.createElement('span'); c.className = 'chip'; c.textContent = x.session; a.appendChild(c);
+      if (x.name && list.length > 1) { const w = document.createElement('span'); w.className = 'who'; w.textContent = x.name + '님'; a.appendChild(w); }
       const b = document.createElement('b'); b.textContent = x.car === '차량없음' ? '차량 없이 방문' : x.car;
       r.appendChild(a); r.appendChild(b); box.appendChild(r);
     });
