@@ -39,6 +39,7 @@
   .msg { font-size: 15px; color: var(--warn); margin-top: 10px; min-height: 1em; }
   .submit { width: 100%; padding: 16px; border: 0; border-radius: 12px; background: var(--red); color: #fff; font-size: 18px; font-weight: 700; }
   .submit:disabled { background: #d9a3ad; }
+  .must { color: var(--red-dark); }
   .pick { display: block; width: 100%; text-align: left; padding: 14px 16px; margin-bottom: 10px; border: 1.5px solid var(--line);
           background: #fff; border-radius: 12px; font-size: 17px; }
   .pick b { display: block; font-size: 18px; }
@@ -62,24 +63,21 @@
     <p>원활한 주차 안내를 위해<br>방문하시는 차량번호를 알려주세요.</p>
   </header>
 
-  <!-- 1. 휴대폰 뒷자리 -->
+  <!-- 1. 주문자 휴대폰 뒷자리 확인 -->
   <section id="v-phone">
     <div class="card">
-      <label class="ttl" for="last4">휴대폰 번호 뒷자리 4자리</label>
-      <p class="desc">신청(주문)하실 때 입력한 휴대폰 번호의 뒷자리를 입력해 주세요.</p>
+      <label class="ttl" for="last4">주문자 휴대폰 번호 뒷자리 4자리</label>
+      <p class="desc"><b class="must">반드시 주문하신 분(주문자)의 휴대폰 번호</b> 뒷자리를 입력해 주세요.<br>방문하시는 분의 번호가 아니라, 신청(주문)할 때 입력한 주문자 번호예요.</p>
       <input class="field" id="last4" type="tel" inputmode="numeric" maxlength="4" placeholder="1234" autocomplete="off">
       <div class="msg" id="phone-msg"></div>
     </div>
     <button class="submit" id="find">확인</button>
   </section>
 
-  <!-- 2. 같은 뒷자리가 여러 명일 때 -->
-  <section id="v-pick" hidden>
-    <div class="card">
-      <p class="hello">신청하신 분을 선택해 주세요.</p>
-      <div id="picks"></div>
-    </div>
-    <button class="link" id="back-pick">← 번호 다시 입력</button>
+  <!-- 링크 오류 -->
+  <section id="v-error" class="card center" hidden>
+    <div class="big">⚠️</div>
+    <p id="error-text">링크가 올바르지 않습니다.<br>문자로 받으신 링크를 다시 눌러주세요.</p>
   </section>
 
   <!-- 3. 입력 -->
@@ -100,7 +98,6 @@
     </div>
 
     <button class="submit" id="submit">등록하기</button>
-    <div class="center"><button class="link" id="back-form">← 처음으로</button></div>
   </section>
 
   <!-- 4. 완료 -->
@@ -128,10 +125,11 @@
   const PLATE_RE = /^([가-힣]{2})?\d{2,3}[가-힣]\d{4}$/;
 
   const $ = id => document.getElementById(id);
-  const views = ['v-phone', 'v-pick', 'v-form', 'v-done', 'v-closed'];
+  const views = ['v-phone', 'v-error', 'v-form', 'v-done', 'v-closed'];
   function show(id) { views.forEach(v => $(v).hidden = v !== id); window.scrollTo(0, 0); }
 
-  let last4 = '', chosen = null;
+  const key = (new URLSearchParams(location.search).get('k') || '').trim();
+  let last4 = '', current = '';
 
   function clean(v) { return String(v || '').replace(/[\s-]/g, ''); }
 
@@ -141,7 +139,7 @@
     return fetch(API_URL, {
       method: 'POST', redirect: 'follow', signal: ctrl.signal,
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(body)
+      body: JSON.stringify(Object.assign({ k: key }, body))
     }).then(r => r.json()).finally(() => clearTimeout(t));
   }
 
@@ -150,53 +148,44 @@
     btn.innerHTML = on ? '<span class="spinner"></span>' + label : label;
   }
 
-  /* 1. 뒷자리 조회 */
+  function linkError() {
+    $('error-text').innerHTML = '신청 내역을 찾을 수 없습니다.<br>문자로 받으신 링크를 다시 눌러주세요.';
+    show('v-error');
+  }
+
+  /* 1. 주문자 뒷자리 확인 */
   let finding = false;
   function find() {
     if (finding) return;
     const inp = $('last4'), msg = $('phone-msg');
     const v = inp.value.replace(/\D/g, '');
-    if (v.length !== 4) { inp.classList.add('err'); msg.textContent = '휴대폰 번호 뒷자리 4자리를 입력해 주세요.'; return; }
+    if (v.length !== 4) { inp.classList.add('err'); msg.textContent = '주문자 휴대폰 번호 뒷자리 4자리를 입력해 주세요.'; return; }
     finding = true; msg.textContent = '';
     busyBtn($('find'), true, '확인 중입니다…');
     post({ action: 'get', last4: v })
       .then(d => {
         if (d.ok) {
           last4 = v;
-          if (d.matches.length === 1) openForm(d.matches[0]);
-          else showPicks(d.matches);
+          $('name').textContent = d.name;
+          $('sessions').innerHTML = '';
+          d.sessions.forEach(s => { const c = document.createElement('span'); c.className = 'chip'; c.textContent = s; $('sessions').appendChild(c); });
+          current = d.car || '';
+          if (current) { $('done-car').textContent = current === '차량없음' ? '차량 없이 방문' : current; show('v-done'); }
+          else { fillForm(''); show('v-form'); }
+        } else if (d.error === 'wrong') {
+          inp.classList.add('err'); inp.select();
+          msg.textContent = '주문자 휴대폰 번호 뒷자리와 일치하지 않습니다. 주문하신 분의 번호로 다시 입력해 주세요.' + (d.left ? ' (' + d.left + '번 남음)' : '');
+        } else if (d.error === 'locked') {
+          msg.textContent = '여러 번 틀려 잠시 입력이 제한되었습니다. 10분 뒤 다시 시도해 주세요.';
         } else if (d.error === 'closed') show('v-closed');
-        else if (d.error === 'notfound') msg.textContent = '신청 내역을 찾을 수 없습니다. 신청하실 때 입력한 번호인지 확인해 주세요.';
+        else if (d.error === 'notfound' || d.error === 'nokey') linkError();
         else msg.textContent = '일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.';
       })
       .catch(() => { msg.textContent = '연결이 원활하지 않습니다. 잠시 후 다시 시도해 주세요.'; })
       .finally(() => { finding = false; busyBtn($('find'), false, '확인'); });
   }
 
-  function showPicks(list) {
-    const box = $('picks'); box.innerHTML = '';
-    list.forEach(m => {
-      const b = document.createElement('button');
-      b.type = 'button'; b.className = 'pick';
-      const n = document.createElement('b'); n.textContent = m.name + '님';
-      const s = document.createElement('span'); s.textContent = m.sessions.join(', ');
-      b.appendChild(n); b.appendChild(s);
-      b.onclick = () => openForm(m);
-      box.appendChild(b);
-    });
-    show('v-pick');
-  }
-
   /* 2. 차량번호 입력 */
-  function openForm(m) {
-    chosen = m;
-    $('name').textContent = m.name;
-    $('sessions').innerHTML = '';
-    m.sessions.forEach(s => { const c = document.createElement('span'); c.className = 'chip'; c.textContent = s; $('sessions').appendChild(c); });
-    if (m.car) { $('done-car').textContent = m.car === '차량없음' ? '차량 없이 방문' : m.car; show('v-done'); }
-    else { fillForm(''); show('v-form'); }
-  }
-
   function addPlate(value) {
     const box = $('plates');
     if (box.children.length >= MAX_CARS) return;
@@ -254,10 +243,10 @@
     }
     saving = true; msg.textContent = '';
     busyBtn($('submit'), true, '저장 중입니다…');
-    post({ action: 'save', last4: last4, id: chosen.id, cars: cars, nocar: nocar })
+    post({ action: 'save', last4: last4, cars: cars, nocar: nocar })
       .then(d => {
         if (d.ok) {
-          chosen.car = d.car;
+          current = d.car;
           $('done-car').textContent = d.car === '차량없음' ? '차량 없이 방문' : d.car;
           show('v-done');
         } else if (d.error === 'closed') show('v-closed');
@@ -268,20 +257,20 @@
       .finally(() => { saving = false; busyBtn($('submit'), false, '등록하기'); });
   }
 
-  function restart() { $('last4').value = ''; $('phone-msg').textContent = ''; show('v-phone'); $('last4').focus(); }
-
   $('last4').addEventListener('input', e => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 4); e.target.classList.remove('err'); $('phone-msg').textContent = ''; });
   $('last4').addEventListener('keydown', e => { if (e.key === 'Enter') find(); });
   $('find').onclick = find;
-  $('back-pick').onclick = restart;
-  $('back-form').onclick = restart;
   $('add').onclick = () => addPlate('');
   $('nocar').onchange = toggleNocar;
   $('submit').onclick = submit;
-  $('edit').onclick = () => { fillForm(chosen.car || ''); show('v-form'); };
+  $('edit').onclick = () => { fillForm(current); show('v-form'); };
 
-  // 마감 여부 확인
-  fetch(API_URL, { redirect: 'follow' }).then(r => r.json()).then(d => { if (d.closed) show('v-closed'); }).catch(() => {});
+  if (!/^[a-z0-9]{4,10}$/.test(key)) {
+    show('v-error');
+  } else {
+    // 마감 여부 확인
+    fetch(API_URL, { redirect: 'follow' }).then(r => r.json()).then(d => { if (d.closed) show('v-closed'); }).catch(() => {});
+  }
 </script>
 </body>
 </html>
