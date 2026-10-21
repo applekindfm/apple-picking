@@ -49,6 +49,13 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   .center { text-align: center; }
   .big { font-size: 46px; line-height: 1; margin-bottom: 8px; }
+  .sess-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .sess-title .chip { font-size: 17px; padding: 4px 14px; }
+  .copy { background: none; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 14px; color: var(--sub); }
+  .done-row { display: flex; justify-content: space-between; gap: 10px; padding: 10px 4px; border-top: 1px solid var(--line); text-align: left; }
+  .done-row:first-child { border-top: 0; }
+  .done-row b { font-size: 18px; }
+  #done-list { margin: 12px 0; }
   .done-car { font-size: 22px; font-weight: 800; margin: 10px 0; letter-spacing: 1px; }
   .link { background: none; border: 0; color: var(--red); font-size: 16px; text-decoration: underline; padding: 8px; }
   footer { text-align: center; color: #999; font-size: 13px; margin-top: 24px; }
@@ -80,23 +87,15 @@
     <p id="error-text">링크가 올바르지 않습니다.<br>문자로 받으신 링크를 다시 눌러주세요.</p>
   </section>
 
-  <!-- 3. 입력 -->
+  <!-- 3. 입력 (회차별) -->
   <section id="v-form" hidden>
     <div class="card">
-      <p class="hello"><span id="name"></span>님 신청 내역</p>
-      <div class="sessions" id="sessions"></div>
+      <p class="hello"><span id="name"></span>님, 안녕하세요.</p>
+      <p class="desc" id="multi-note" style="margin:0">신청하신 회차마다 방문 차량번호를 각각 적어주세요.</p>
+      <p class="desc" style="margin:6px 0 0">대신 신청해 주셨다면, 실제로 방문하시는 분의 차량번호를 적어주세요.</p>
     </div>
-
-    <div class="card">
-      <label class="ttl" for="p0">방문 차량번호</label>
-      <p class="desc">대신 신청해 주셨다면, 실제로 방문하시는 분의 차량번호를 적어주세요.</p>
-      <div id="plates"></div>
-      <p class="hint">예: 12가3456 · 123가4567</p>
-      <button type="button" class="add" id="add">+ 차량 추가 (일행 차량이 더 있을 때)</button>
-      <label class="nocar"><input type="checkbox" id="nocar"> 차량 없이 방문해요 (대중교통·동승 등)</label>
-      <div class="msg" id="form-msg"></div>
-    </div>
-
+    <div id="sess-list"></div>
+    <div class="msg" id="form-msg"></div>
     <button class="submit" id="submit">등록하기</button>
   </section>
 
@@ -104,7 +103,7 @@
   <section id="v-done" class="card center" hidden>
     <div class="big">✅</div>
     <p><b>등록이 완료되었습니다.</b></p>
-    <div class="done-car" id="done-car"></div>
+    <div id="done-list"></div>
     <p class="hint">변경이 필요하면 이 링크에서 다시 등록하시면 됩니다.</p>
     <button class="link" id="edit">차량번호 수정하기</button>
   </section>
@@ -129,7 +128,7 @@
   function show(id) { views.forEach(v => $(v).hidden = v !== id); window.scrollTo(0, 0); }
 
   const key = (new URLSearchParams(location.search).get('k') || '').trim();
-  let last4 = '', current = '';
+  let last4 = '';
 
   function clean(v) { return String(v || '').replace(/[\s-]/g, ''); }
 
@@ -154,7 +153,7 @@
   }
 
   /* 1. 주문자 뒷자리 확인 */
-  let finding = false;
+  let finding = false, sessions = [];
   function find() {
     if (finding) return;
     const inp = $('last4'), msg = $('phone-msg');
@@ -167,11 +166,9 @@
         if (d.ok) {
           last4 = v;
           $('name').textContent = d.name;
-          $('sessions').innerHTML = '';
-          d.sessions.forEach(s => { const c = document.createElement('span'); c.className = 'chip'; c.textContent = s; $('sessions').appendChild(c); });
-          current = d.car || '';
-          if (current) { $('done-car').textContent = current === '차량없음' ? '차량 없이 방문' : current; show('v-done'); }
-          else { fillForm(''); show('v-form'); }
+          sessions = d.sessions;
+          if (sessions.every(x => x.car)) showDone(sessions);
+          else openForm();
         } else if (d.error === 'wrong') {
           inp.classList.add('err'); inp.select();
           msg.textContent = '주문자 휴대폰 번호 뒷자리와 일치하지 않습니다. 주문하신 분의 번호로 다시 입력해 주세요.' + (d.left ? ' (' + d.left + '번 남음)' : '');
@@ -185,72 +182,121 @@
       .finally(() => { finding = false; busyBtn($('find'), false, '확인'); });
   }
 
-  /* 2. 차량번호 입력 */
-  function addPlate(value) {
-    const box = $('plates');
+  /* 2. 회차별 차량번호 입력 */
+  function parseCar(car) { return (car && car !== '차량없음') ? car.split(',').map(s => s.trim()).filter(Boolean) : []; }
+
+  function makeBlock(sess, idx) {
+    const card = document.createElement('div'); card.className = 'card sess';
+    const head = document.createElement('div'); head.className = 'sess-title';
+    const chip = document.createElement('span'); chip.className = 'chip'; chip.textContent = sess.session;
+    head.appendChild(chip);
+    if (idx > 0) {
+      const cp = document.createElement('button'); cp.type = 'button'; cp.className = 'copy'; cp.textContent = '위 회차와 같은 차량';
+      cp.onclick = () => copyFrom(idx - 1, card);
+      head.appendChild(cp);
+    }
+    card.appendChild(head);
+    const lbl = document.createElement('label'); lbl.className = 'ttl'; lbl.textContent = '방문 차량번호'; card.appendChild(lbl);
+    const plates = document.createElement('div'); plates.className = 'plates'; card.appendChild(plates);
+    const hint = document.createElement('p'); hint.className = 'hint'; hint.textContent = '예: 12가3456 · 123가4567'; card.appendChild(hint);
+    const add = document.createElement('button'); add.type = 'button'; add.className = 'add'; add.textContent = '+ 차량 추가 (일행 차량이 더 있을 때)';
+    add.onclick = () => addPlate(card, ''); card.appendChild(add);
+    const nl = document.createElement('label'); nl.className = 'nocar';
+    const nc = document.createElement('input'); nc.type = 'checkbox'; nc.className = 'nc';
+    nc.onchange = () => toggleNocar(card);
+    nl.appendChild(nc); nl.appendChild(document.createTextNode(' 이 회차는 차량 없이 방문해요 (대중교통·동승 등)'));
+    card.appendChild(nl);
+    card._add = add; card._plates = plates; card._nc = nc; card._session = sess.session;
+    fillBlock(card, sess.car || '');
+    return card;
+  }
+  function addPlate(card, value) {
+    const box = card._plates;
     if (box.children.length >= MAX_CARS) return;
     const i = box.children.length;
     const row = document.createElement('div'); row.className = 'plate';
     const inp = document.createElement('input');
-    inp.type = 'text'; inp.id = 'p' + i; inp.placeholder = '12가3456';
-    inp.autocomplete = 'off'; inp.value = value || '';
-    inp.setAttribute('aria-label', '차량번호 ' + (i + 1));
+    inp.type = 'text'; inp.placeholder = '12가3456'; inp.autocomplete = 'off'; inp.value = value || '';
+    inp.setAttribute('aria-label', card._session + ' 차량번호 ' + (i + 1));
     inp.addEventListener('input', () => { inp.classList.remove('err'); $('form-msg').textContent = ''; });
     row.appendChild(inp);
     if (i > 0) {
       const del = document.createElement('button');
       del.type = 'button'; del.className = 'del'; del.textContent = '×'; del.setAttribute('aria-label', '삭제');
-      del.onclick = () => { row.remove(); updateAdd(); };
+      del.onclick = () => { row.remove(); updateAdd(card); };
       row.appendChild(del);
     }
     box.appendChild(row);
-    updateAdd();
+    updateAdd(card);
   }
-  function updateAdd() { $('add').hidden = $('nocar').checked || $('plates').children.length >= MAX_CARS; }
-  function fillForm(car) {
-    $('plates').innerHTML = '';
-    $('nocar').checked = car === '차량없음';
-    const cars = (car && car !== '차량없음') ? car.split(',').map(s => s.trim()).filter(Boolean) : [];
-    if (!cars.length) addPlate('');
-    cars.slice(0, MAX_CARS).forEach(c => addPlate(c));
-    toggleNocar();
+  function updateAdd(card) { card._add.hidden = card._nc.checked || card._plates.children.length >= MAX_CARS; }
+  function fillBlock(card, car) {
+    card._plates.innerHTML = '';
+    card._nc.checked = car === '차량없음';
+    const cars = parseCar(car);
+    if (!cars.length) addPlate(card, '');
+    cars.slice(0, MAX_CARS).forEach(c => addPlate(card, c));
+    toggleNocar(card);
   }
-  function toggleNocar() {
-    const off = $('nocar').checked;
-    $('plates').querySelectorAll('input,button').forEach(el => el.disabled = off);
-    $('plates').style.opacity = off ? .4 : 1;
+  function toggleNocar(card) {
+    const off = card._nc.checked;
+    card._plates.querySelectorAll('input,button').forEach(el => el.disabled = off);
+    card._plates.style.opacity = off ? .4 : 1;
     $('form-msg').textContent = '';
-    updateAdd();
+    updateAdd(card);
+  }
+  function readBlock(card) {
+    if (card._nc.checked) return { nocar: true, value: '차량없음' };
+    const cars = [];
+    card._plates.querySelectorAll('input').forEach(inp => { const v = clean(inp.value); if (v) cars.push(v); });
+    return { nocar: false, cars: [...new Set(cars)], value: [...new Set(cars)].join(', ') };
+  }
+  function copyFrom(prevIdx, card) {
+    const prev = $('sess-list').children[prevIdx];
+    fillBlock(card, readBlock(prev).value);
+  }
+  function openForm() {
+    const list = $('sess-list'); list.innerHTML = '';
+    sessions.forEach((x, i) => list.appendChild(makeBlock(x, i)));
+    $('multi-note').hidden = sessions.length < 2;
+    $('form-msg').textContent = '';
+    show('v-form');
+  }
+  function showDone(list) {
+    const box = $('done-list'); box.innerHTML = '';
+    list.forEach(x => {
+      const r = document.createElement('div'); r.className = 'done-row';
+      const a = document.createElement('span'); a.className = 'chip'; a.textContent = x.session;
+      const b = document.createElement('b'); b.textContent = x.car === '차량없음' ? '차량 없이 방문' : x.car;
+      r.appendChild(a); r.appendChild(b); box.appendChild(r);
+    });
+    show('v-done');
   }
 
   let saving = false;
   function submit() {
     if (saving) return;
     const msg = $('form-msg');
-    const nocar = $('nocar').checked;
-    let cars = [];
-    if (!nocar) {
-      const inputs = [...$('plates').querySelectorAll('input')];
-      let bad = false;
-      inputs.forEach(inp => {
-        const v = clean(inp.value);
-        if (!v) return;
-        if (!PLATE_RE.test(v)) { inp.classList.add('err'); bad = true; } else cars.push(v);
-      });
-      if (bad) { msg.textContent = '차량번호 형식을 확인해 주세요. (예: 12가3456)'; return; }
-      if (!cars.length) { msg.textContent = '차량번호를 입력하거나 "차량 없이 방문해요"를 선택해 주세요.'; inputs[0] && inputs[0].focus(); return; }
-      cars = [...new Set(cars)];
+    const cards = [...$('sess-list').children];
+    const items = [];
+    for (const card of cards) {
+      if (card._nc.checked) { items.push({ session: card._session, nocar: true }); continue; }
+      const inputs = [...card._plates.querySelectorAll('input')];
+      let bad = false; const cars = [];
+      inputs.forEach(inp => { const v = clean(inp.value); if (!v) return; if (!PLATE_RE.test(v)) { inp.classList.add('err'); bad = true; } else cars.push(v); });
+      if (bad) { msg.textContent = card._session + ' 차량번호 형식을 확인해 주세요. (예: 12가3456)'; card.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+      if (!cars.length) { msg.textContent = card._session + ' 차량번호를 입력하거나 "차량 없이 방문해요"를 선택해 주세요.'; inputs[0] && inputs[0].focus(); return; }
+      items.push({ session: card._session, cars: [...new Set(cars)], nocar: false });
     }
     saving = true; msg.textContent = '';
     busyBtn($('submit'), true, '저장 중입니다…');
-    post({ action: 'save', last4: last4, cars: cars, nocar: nocar })
+    post({ action: 'save', last4: last4, items: items })
       .then(d => {
         if (d.ok) {
-          current = d.car;
-          $('done-car').textContent = d.car === '차량없음' ? '차량 없이 방문' : d.car;
-          show('v-done');
+          d.sessions.forEach(x => { const t = sessions.find(o => o.session === x.session); if (t) t.car = x.car; });
+          showDone(sessions);
         } else if (d.error === 'closed') show('v-closed');
-        else if (d.error === 'badplate') msg.textContent = '차량번호 형식을 확인해 주세요. (예: 12가3456)';
+        else if (d.error === 'badplate') msg.textContent = (d.session ? d.session + ' ' : '') + '차량번호 형식을 확인해 주세요. (예: 12가3456)';
         else msg.textContent = '저장하지 못했습니다. 잠시 후 다시 [등록하기]를 눌러주세요.';
       })
       .catch(() => { msg.textContent = '응답이 없어 저장되지 않았을 수 있습니다. 다시 [등록하기]를 눌러주세요.'; })
@@ -260,10 +306,8 @@
   $('last4').addEventListener('input', e => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 4); e.target.classList.remove('err'); $('phone-msg').textContent = ''; });
   $('last4').addEventListener('keydown', e => { if (e.key === 'Enter') find(); });
   $('find').onclick = find;
-  $('add').onclick = () => addPlate('');
-  $('nocar').onchange = toggleNocar;
   $('submit').onclick = submit;
-  $('edit').onclick = () => { fillForm(current); show('v-form'); };
+  $('edit').onclick = openForm;
 
   if (!/^[a-z0-9]{4,10}$/.test(key)) {
     show('v-error');
