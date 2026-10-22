@@ -208,6 +208,14 @@ tr.tot td{font-weight:900;border-bottom:0}
   .charge strong{font-size:42px}
   .pad button{height:48px}
 }
+.pinbox{background:var(--surface);border-radius:22px;width:min(340px,100%);padding:22px 20px;display:flex;flex-direction:column;gap:12px;box-shadow:0 20px 50px rgba(0,0,0,.3);text-align:center}
+.pinbox>b{font-size:20px}
+.pin-sub{font-size:13px;color:var(--muted)}
+.pin-dots{display:flex;justify-content:center;gap:14px;padding:6px 0}
+.pin-dots i{width:16px;height:16px;border-radius:50%;border:2px solid var(--leaf)}
+.pin-dots i.on{background:var(--leaf)}
+.pin-dots.shake{animation:shake .3s}
+@keyframes shake{25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
 /* ===== 한 화면 모드 (아이패드 등 폭 700px 이상): 스크롤 없이 메뉴+주문서 ===== */
 @media (min-width:700px){
   html,body.fit{height:100%}
@@ -352,7 +360,22 @@ tr.tot td{font-weight:900;border-bottom:0}
         <button data-k="clr" class="fn">지움</button><button data-k="0">0</button><button data-k="del" class="fn" aria-label="한 글자 지우기">←</button>
       </div>
       <div class="ph-err" id="phoneErr" hidden></div>
-      <button class="next" id="nextBtn">결제 완료 · 다음 주문</button>
+      <button class="next" id="nextBtn">주문 완료</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="pinOverlay" hidden>
+  <div class="pinbox" role="dialog" aria-modal="true" aria-labelledby="pinTitle">
+    <b id="pinTitle">매출 보기</b>
+    <span class="pin-sub">직원용 비밀번호 4자리를 눌러주세요</span>
+    <div class="pin-dots" id="pinDots"><i></i><i></i><i></i><i></i></div>
+    <div class="ph-err" id="pinErr" hidden>비밀번호가 달라요</div>
+    <div class="pad" id="pinPad">
+      <button data-p="1">1</button><button data-p="2">2</button><button data-p="3">3</button>
+      <button data-p="4">4</button><button data-p="5">5</button><button data-p="6">6</button>
+      <button data-p="7">7</button><button data-p="8">8</button><button data-p="9">9</button>
+      <button data-p="cancel" class="fn">취소</button><button data-p="0">0</button><button data-p="del" class="fn" aria-label="한 글자 지우기">←</button>
     </div>
   </div>
 </div>
@@ -450,8 +473,14 @@ function renderCart(){
 
 /* ---------- 주문 접수 ---------- */
 let busy=false, lastOrder=null;
+/* 시트에 이미 있는 같은 날·같은 단말 번호 중 가장 큰 번호 (다른 기기·브라우저에서 접수한 것 포함) */
+const sheetMax={};
+function noteSheetSeq(list){
+  list.forEach(r=>{const m=String(r.no||"").match(/^(\d{4})-([A-Z])-(\d+)$/); if(!m)return; const k=m[1]+"-"+m[2]; sheetMax[k]=Math.max(sheetMax[k]||0,+m[3]);});
+}
 function nextNo(date){
-  const k="kiosk-seq-"+date+"-"+device; const n=ls.get(k,0)+1; ls.set(k,n);
+  const k="kiosk-seq-"+date+"-"+device; const md=date.slice(5).replace("-","");
+  const n=Math.max(ls.get(k,0),sheetMax[md+"-"+device]||0)+1; ls.set(k,n);
   return n;
 }
 function submit(){
@@ -564,6 +593,8 @@ window.addEventListener("online",()=>{updateSync();if(pending.length||phones.len
 window.addEventListener("offline",updateSync);
 setInterval(()=>{if((pending.length||phones.length)&&!flushing)flush()},20000);
 if(pending.length||phones.length)setTimeout(flush,1500);
+/* 시작할 때 시트의 주문번호를 한 번 읽어 번호가 겹치지 않게 */
+api({action:"list"}).then(j=>{noteSheetSeq((j.rows||[]).map(r=>({no:r[0]})));updateSync();}).catch(()=>{});
 
 /* ---------- 매출 ---------- */
 let rows=[], day="today", salesLoading=false;
@@ -589,6 +620,7 @@ async function loadSales(){
   setSalesMsg("시트에서 불러오는 중…");
   try{
     const got=await api({action:"list"});
+    noteSheetSeq((got.rows||[]).map(r=>({no:r[0]})));
     rows=(got.rows||[]).map((r,i)=>({row:i+2,no:r[0]||"",at:r[1]||"",date:normDate(r[2]||r[1]),cat:r[3]||"",item:r[4]||"",qty:numOf(r[5]),list:numOf(r[6]),price:numOf(r[7]),save:numOf(r[8]),amt:numOf(r[9]),pay:r[10]||"",status:r[11]||"",phone:r[13]||""})).filter(r=>r.no);
     setSalesMsg("");
   }catch(e){ setSalesMsg(errText(e)+" — 마지막으로 불러온 내용을 보여드려요.",true); }
@@ -646,7 +678,22 @@ function show(tab){
   $("tabOrder").setAttribute("aria-selected",!s); $("tabSales").setAttribute("aria-selected",s);
   if(s){renderDayChips();renderDevChips();renderPending();renderSales();loadSales()}
 }
-$("tabOrder").onclick=()=>show("order"); $("tabSales").onclick=()=>show("sales");
+$("tabOrder").onclick=()=>show("order");
+/* 매출 탭은 직원 비밀번호(2026)를 눌러야 열림. 주문 화면으로 돌아오면 다시 잠김 */
+const SALES_PIN="2026"; let pin="";
+function renderPin(){document.querySelectorAll("#pinDots i").forEach((d,i)=>d.classList.toggle("on",i<pin.length))}
+$("tabSales").onclick=()=>{ if(!$("viewSales").hidden)return; pin=""; renderPin(); $("pinErr").hidden=true; $("pinOverlay").hidden=false; };
+$("pinPad").addEventListener("click",e=>{
+  const b=e.target.closest("[data-p]"); if(!b)return; const k=b.dataset.p;
+  if(k==="cancel"){ $("pinOverlay").hidden=true; return; }
+  if(k==="del"){ pin=pin.slice(0,-1); renderPin(); return; }
+  if(pin.length>=4)return;
+  pin+=k; renderPin(); $("pinErr").hidden=true;
+  if(pin.length===4){
+    if(pin===SALES_PIN){ setTimeout(()=>{ $("pinOverlay").hidden=true; pin=""; renderPin(); show("sales"); },120); }
+    else{ const d=$("pinDots"); d.classList.remove("shake"); void d.offsetWidth; d.classList.add("shake"); $("pinErr").hidden=false; setTimeout(()=>{pin="";renderPin()},350); }
+  }
+});
 
 /* 화면 꺼짐 방지 (가능한 기기만) */
 let lock=null;function wake(){if(lock||!navigator.wakeLock)return;navigator.wakeLock.request("screen").then(l=>{lock=l;l.addEventListener("release",()=>lock=null)}).catch(()=>{})}
