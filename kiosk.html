@@ -439,7 +439,7 @@ function renderCart(){
   $("lines").innerHTML=keys.length?keys.map(k=>{const m=byKey[k],q=cart[k];
     return `<li><div><div class="ln-name">${esc(m.label)}</div><div class="ln-sub num">${m.list?`<s>${won(m.list)}</s> → `:""}${won(m.price)}</div></div><div class="ln-amt num">${won(m.price*q)}</div>
       <div class="stepper"><button data-step="-1" data-key="${k}" aria-label="${esc(m.label)} 하나 빼기">−</button><span class="num">${q}</span><button data-step="1" data-key="${k}" aria-label="${esc(m.label)} 하나 더">+</button></div></li>`}).join("")
-    :`<li class="empty" style="display:block;border:0">메뉴를 누르면 여기에 담겨요.<br>고객님이 말씀하신 상품을 눌러주세요.</li>`;
+    :`<li class="empty" style="display:block;border:0">메뉴를 누르면 여기에 담겨요.</li>`;
   const t=totals();
   $("sumList").textContent=won(t.list); $("sumSave").textContent=t.save?"−"+won(t.save):"0원"; $("sumTotal").textContent=won(t.total);
   $("barTotal").textContent=won(t.total); $("barCount").textContent=t.count?`${t.count}개 담음${t.save?" · "+won(t.save)+" 할인":""}`:"담은 상품 없음";
