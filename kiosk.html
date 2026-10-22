@@ -216,12 +216,21 @@ tr.tot td{font-weight:900;border-bottom:0}
 .pin-dots i.on{background:var(--leaf)}
 .pin-dots.shake{animation:shake .3s}
 @keyframes shake{25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
-.card.sold{pointer-events:none;filter:grayscale(.85);opacity:.55}
-.card.sold .pic::after{content:"품절";position:absolute;inset:0;display:grid;place-items:center;font-family:var(--display);font-size:34px;color:#fff;background:rgba(30,30,30,.38);letter-spacing:.06em}
-.card.sold .price{color:var(--muted)}
-.soldchips{display:flex;flex-wrap:wrap;gap:6px}
-.chip.so[aria-pressed="true"]{border-color:var(--bad);color:var(--bad);background:var(--apple-soft)}
-.chip.so[aria-pressed="true"]::after{content:" · 품절"}
+.card.sold,.card.prep{pointer-events:none}
+.card.sold{filter:grayscale(.85);opacity:.55}
+.card.prep{opacity:.8}
+.card.sold .pic::after,.card.prep .pic::after{content:attr(data-st);position:absolute;inset:0;display:grid;place-items:center;font-family:var(--display);font-size:32px;color:#fff;letter-spacing:.06em}
+.card.sold .pic::after{background:rgba(30,30,30,.4)}
+.card.prep .pic::after{background:rgba(183,121,31,.62)}
+.card.sold .price,.card.prep .price{color:var(--muted)}
+.stlist{display:flex;flex-direction:column;gap:6px;flex:1 1 100%;min-width:0}
+.strow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;font-size:13.5px;color:var(--ink)}
+.strow .seg{display:flex;flex:none;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.strow .seg button{width:auto;white-space:nowrap;border:0;background:var(--surface);padding:6px 10px;font-size:12.5px;font-weight:700;color:var(--muted)}
+.strow .seg button+button{border-left:1px solid var(--line)}
+.strow .seg button[aria-pressed="true"][data-st="판매중"]{background:var(--leaf-soft);color:var(--leaf)}
+.strow .seg button[aria-pressed="true"][data-st="준비중"]{background:var(--warn-soft);color:var(--warn)}
+.strow .seg button[aria-pressed="true"][data-st="품절"]{background:var(--apple-soft);color:var(--bad)}
 .ln-sold{color:var(--bad);font-size:11.5px;font-weight:900;margin-left:4px}
 /* ===== 한 화면 모드 (아이패드 등 폭 700px 이상): 스크롤 없이 메뉴+주문서 ===== */
 @media (min-width:700px){
@@ -344,8 +353,8 @@ tr.tot td{font-weight:900;border-bottom:0}
       <h3 style="margin-top:18px">미전송 주문</h3><div id="pendingBox" class="device"></div>
       <h3 style="margin-top:18px">이 기기 단말 이름</h3>
       <div class="device"><span>여러 기기로 받을 때 주문번호가 겹치지 않게 기기마다 다르게 고르세요.</span><div id="devChips" style="display:flex;gap:6px"></div></div>
-      <h3 style="margin-top:18px">품절 설정</h3>
-      <div class="device"><span>누르면 품절 ↔ 판매로 바뀌어요. 모든 기기에 30초 안에 반영되고, 시트 ‘품절’ 탭에서도 바꿀 수 있어요.</span><div id="soldChips" class="soldchips"></div></div>
+      <h3 style="margin-top:18px">상품 상태</h3>
+      <div class="device"><span>준비중·품절인 상품은 주문 화면에서 누를 수 없어요. 모든 기기에 30초 안에 반영되고, 시트 ‘상품상태’ 탭에서도 바꿀 수 있어요.</span><div id="soldChips" class="stlist"></div></div>
     </div>
   </div>
   <div class="panel"><h3>주문 내역 <span class="pill" id="orderCountPill">0</span></h3><div class="orders" id="orderList"></div></div>
@@ -433,14 +442,19 @@ let device=ls.get("kiosk-device","A");
 const cart={}; let pay="카드";
 let pending=ls.get("kiosk-pending",[]); // [{no, rows, tried}]
 
-/* ---------- 품절 ---------- */
-let soldout=new Set(ls.get("kiosk-soldout",[]));
+/* ---------- 상품 상태 (판매중 / 준비중 / 품절) ---------- */
+let pstat=ls.get("kiosk-status",{});
+const blocked=id=>!!pstat[id];
 function renderSold(){
-  MENU.forEach(m=>{const el=document.querySelector(`.card[data-add="${m.id}"]`); if(el){const s=soldout.has(m.id); el.classList.toggle("sold",s); el.disabled=s; el.setAttribute("aria-label",esc(m.label||m.name)+(s?" 품절":" 담기"));}});
-  const box=$("soldChips"); if(box) box.innerHTML=MENU.map(m=>`<button class="chip so" data-so="${m.id}" aria-pressed="${soldout.has(m.id)}">${esc(m.label||m.name)}</button>`).join("");
+  MENU.forEach(m=>{const el=document.querySelector(`.card[data-add="${m.id}"]`); if(!el)return; const st=pstat[m.id]||"";
+    el.classList.toggle("sold",st==="품절"); el.classList.toggle("prep",st==="준비중"); el.disabled=!!st;
+    const pic=el.querySelector(".pic"); if(pic)pic.dataset.st=st;
+    el.setAttribute("aria-label",(m.label||m.name)+(st?" "+st:" 담기"));});
+  const box=$("soldChips"); if(box) box.innerHTML=MENU.map(m=>{const cur=pstat[m.id]||"판매중";
+    return `<div class="strow"><span>${esc(m.label||m.name)}</span><div class="seg">${["판매중","준비중","품절"].map(s=>`<button data-st-id="${m.id}" data-st="${s}" aria-pressed="${cur===s}">${s}</button>`).join("")}</div></div>`}).join("");
   if(typeof renderCart==="function"&&Object.keys(cart).length)renderCart();
 }
-function setSoldList(list){ soldout=new Set(list||[]); ls.set("kiosk-soldout",[...soldout]); renderSold(); }
+function setStatusMap(map){ pstat=map||{}; ls.set("kiosk-status",pstat); renderSold(); }
 
 /* ---------- 메뉴 그리기 ---------- */
 function pct(m){return Math.round((1-m.price/m.list)*100)}
@@ -465,7 +479,7 @@ document.addEventListener("click",e=>{
   const s=e.target.closest("[data-step]"); if(s){add(s.dataset.key,+s.dataset.step);return}
   const p=e.target.closest("[data-pay]"); if(p&&p.closest(".pay")){pay=p.dataset.pay;renderCart();return}
 });
-function add(key,d){if(d>0&&soldout.has(key))return;const q=(cart[key]||0)+d; if(q<=0)delete cart[key]; else cart[key]=Math.min(q,99); renderCart();}
+function add(key,d){if(d>0&&blocked(key))return;const q=(cart[key]||0)+d; if(q<=0)delete cart[key]; else cart[key]=Math.min(q,99); renderCart();}
 $("clearBtn").onclick=()=>{for(const k in cart)delete cart[k];renderCart()};
 
 /* 가공품 먼저, 그다음 매점 (메뉴판 순서) */
@@ -479,7 +493,7 @@ function totals(){
 function renderCart(){
   const keys=cartKeys();
   $("lines").innerHTML=keys.length?keys.map(k=>{const m=byKey[k],q=cart[k];
-    return `<li><div><div class="ln-name">${esc(m.label)}${soldout.has(k)?'<span class="ln-sold">품절</span>':""}</div><div class="ln-sub num">${m.list?`<s>${won(m.list)}</s> → `:""}${won(m.price)}</div></div><div class="ln-amt num">${won(m.price*q)}</div>
+    return `<li><div><div class="ln-name">${esc(m.label)}${blocked(k)?`<span class="ln-sold">${pstat[k]}</span>`:""}</div><div class="ln-sub num">${m.list?`<s>${won(m.list)}</s> → `:""}${won(m.price)}</div></div><div class="ln-amt num">${won(m.price*q)}</div>
       <div class="stepper"><button data-step="-1" data-key="${k}" aria-label="${esc(m.label)} 하나 빼기">−</button><span class="num">${q}</span><button data-step="1" data-key="${k}" aria-label="${esc(m.label)} 하나 더">+</button></div></li>`}).join("")
     :`<li class="empty" style="display:block;border:0">메뉴를 누르면 여기에 담겨요.</li>`;
   const t=totals();
@@ -612,14 +626,14 @@ window.addEventListener("online",()=>{updateSync();if(pending.length||phones.len
 window.addEventListener("offline",updateSync);
 setInterval(()=>{if((pending.length||phones.length)&&!flushing)flush()},20000);
 if(pending.length||phones.length)setTimeout(flush,1500);
-/* 품절 상태: 시작할 때 + 30초마다 시트에서 읽기 */
-function refreshSoldout(){ api({action:"soldout"}).then(j=>setSoldList(j.soldout)).catch(()=>{}); }
+/* 상품 상태: 시작할 때 + 30초마다 시트에서 읽기 */
+function refreshSoldout(){ api({action:"status"}).then(j=>setStatusMap(j.status)).catch(()=>{}); }
 refreshSoldout(); setInterval(refreshSoldout,30000);
 document.addEventListener("click",e=>{
-  const b=e.target.closest("[data-so]"); if(!b)return;
-  const id=b.dataset.so, on=!soldout.has(id), before=[...soldout];
-  on?soldout.add(id):soldout.delete(id); setSoldList([...soldout]);
-  api({action:"setSoldout",id,on}).then(j=>setSoldList(j.soldout)).catch(err=>{ setSoldList(before); setSalesMsg("품절 설정 실패: "+errText(err)+" — 다시 눌러 주세요.",true); });
+  const b=e.target.closest("[data-st-id]"); if(!b)return;
+  const id=b.dataset.stId, st=b.dataset.st, before={...pstat};
+  const next={...pstat}; if(st==="판매중")delete next[id]; else next[id]=st; setStatusMap(next);
+  api({action:"setStatus",id,status:st}).then(j=>setStatusMap(j.status)).catch(err=>{ setStatusMap(before); setSalesMsg("상품 상태 변경 실패: "+errText(err)+" — 다시 눌러 주세요.",true); });
 });
 /* 시작할 때 시트의 주문번호를 한 번 읽어 번호가 겹치지 않게 */
 api({action:"list"}).then(j=>{noteSheetSeq((j.rows||[]).map(r=>({no:r[0]})));updateSync();}).catch(()=>{});
