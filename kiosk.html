@@ -187,6 +187,27 @@ tr.tot td{font-weight:900;border-bottom:0}
 .device button{width:40px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 
+.done-l,.done-r{display:flex;flex-direction:column;gap:10px;min-width:0}
+.ph-l{display:flex;align-items:baseline;gap:8px}
+.ph-l b{font-size:16px}
+.ph-l span{font-size:12.5px;color:var(--muted)}
+.ph-d{font-size:28px;font-weight:900;text-align:center;letter-spacing:.02em;padding:8px;border:2px solid var(--leaf);border-radius:12px;background:var(--leaf-soft);color:var(--ink)}
+.ph-d.empty{color:var(--muted);font-weight:700}
+.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.pad button{height:54px;border-radius:12px;border:1px solid var(--line);background:var(--paper);font-size:24px;font-weight:800}
+.pad button:active{background:var(--leaf-soft)}
+.pad button.fn{font-size:16px;color:var(--muted)}
+.ph-err{font-size:13px;font-weight:700;color:var(--bad)}
+.done .ph{color:var(--muted)}
+@media (min-width:700px){
+  .done{width:min(880px,100%);display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22px;align-items:start}
+}
+@media (min-width:700px) and (max-height:800px){
+  .done{padding:18px 20px}
+  .charge{padding:12px}
+  .charge strong{font-size:42px}
+  .pad button{height:48px}
+}
 /* ===== 한 화면 모드 (아이패드 등 폭 700px 이상): 스크롤 없이 메뉴+주문서 ===== */
 @media (min-width:700px){
   html,body.fit{height:100%}
@@ -315,11 +336,24 @@ tr.tot td{font-weight:900;border-bottom:0}
 
 <div class="overlay" id="overlay" hidden>
   <div class="done" role="dialog" aria-modal="true" aria-labelledby="doneTitle">
-    <div class="ono"><span id="doneTitle">주문 접수 완료</span><b class="num" id="doneNo">A-001</b></div>
-    <div class="charge"><small id="donePay">카드 결제</small><strong class="num" id="doneTotal">0원</strong><em id="doneSave"></em></div>
-    <ul id="doneLines"></ul>
-    <div class="note wait" id="doneNote">시트에 저장하는 중…</div>
-    <button class="next" id="nextBtn">결제 완료 · 다음 주문</button>
+    <div class="done-l">
+      <div class="ono"><span id="doneTitle">주문 접수 완료</span><b class="num" id="doneNo">A-001</b></div>
+      <div class="charge"><small id="donePay">카드 결제</small><strong class="num" id="doneTotal">0원</strong><em id="doneSave"></em></div>
+      <ul id="doneLines"></ul>
+      <div class="note wait" id="doneNote">시트에 저장하는 중…</div>
+    </div>
+    <div class="done-r">
+      <div class="ph-l"><b>연락처</b><span>010 뒤 8자리 · 준비되면 연락드려요 (선택)</span></div>
+      <div class="ph-d num" id="phoneDisp" aria-live="polite">010-____-____</div>
+      <div class="pad" id="pad">
+        <button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button>
+        <button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>
+        <button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>
+        <button data-k="clr" class="fn">지움</button><button data-k="0">0</button><button data-k="del" class="fn" aria-label="한 글자 지우기">←</button>
+      </div>
+      <div class="ph-err" id="phoneErr" hidden></div>
+      <button class="next" id="nextBtn">결제 완료 · 다음 주문</button>
+    </div>
   </div>
 </div>
 
@@ -434,14 +468,26 @@ function submit(){
 }
 $("submitBtn").onclick=submit; $("submitBtn2").onclick=submit;
 
+/* 010은 고정, 뒤 8자리만 입력 */
+let phone="";
+const fmtPhone=d=>{const s=(d+"________").slice(0,8);return "010-"+s.slice(0,4)+"-"+s.slice(4,8)};
+function renderPhone(){
+  const el=$("phoneDisp"); el.textContent=fmtPhone(phone); el.classList.toggle("empty",!phone.length); $("phoneErr").hidden=true;
+}
+$("pad").addEventListener("click",e=>{
+  const b=e.target.closest("[data-k]"); if(!b)return; const k=b.dataset.k;
+  if(k==="clr")phone=""; else if(k==="del")phone=phone.slice(0,-1); else if(phone.length<8)phone+=k;
+  renderPhone();
+});
 function showDone(){
   const o=lastOrder;
   $("doneNo").textContent=o.short; $("doneTotal").textContent=won(o.t.total);
   $("donePay").textContent=o.pay+" 결제할 금액";
   $("doneSave").textContent=o.t.save?`정상가 ${won(o.t.list)}에서 ${won(o.t.save)} 할인`:"";
   $("doneLines").innerHTML=o.lines.map(l=>`<li><span>${esc(l.label)} × ${l.q}</span><span class="num">${won(l.amt)}</span></li>`).join("");
+  phone=""; renderPhone();
   setNote();
-  $("overlay").hidden=false; $("nextBtn").focus();
+  $("overlay").hidden=false;
 }
 function setNote(){
   if($("overlay").hidden&&!lastOrder)return;
@@ -451,11 +497,18 @@ function setNote(){
   if(flushing){el.className="note wait";el.textContent="구글 시트에 저장하는 중…";return}
   el.className="note err";el.textContent=lastErr?lastErr+" — 주문은 이 기기에 보관했다가 다음 주문 때 함께 보냅니다.":"저장 대기 중 — 다음 주문 때 함께 보냅니다.";
 }
-$("nextBtn").onclick=()=>{ $("overlay").hidden=true; for(const k in cart)delete cart[k]; pay="카드"; busy=false; renderCart(); };
+$("nextBtn").onclick=()=>{
+  if(phone.length>0&&phone.length<8){ const er=$("phoneErr"); er.hidden=false; er.textContent="8자리를 끝까지 누르거나 ‘지움’을 눌러 비워 주세요."; return; }
+  if(phone.length===8&&lastOrder){
+    const f="010-"+phone.slice(0,4)+"-"+phone.slice(4);
+    phones.push({id:lastOrder.no+"|"+lastOrder.rows[0][1],no:lastOrder.no,at:lastOrder.rows[0][1],phone:f}); ls.set("kiosk-phones",phones); flush();
+  }
+  $("overlay").hidden=true; for(const k in cart)delete cart[k]; pay="카드"; busy=false; renderCart(); };
 
 /* ---------- 구글 시트 연동 (Apps Script 웹앱) ---------- */
 const API_URL="https://script.google.com/macros/s/AKfycbyxx24luzQkh6Ljw1F0VD804fhgd_VIKssDdHyuDUwBfY-UmR8doC72qDi_-YYW2YLhqA/exec";
 let flushing=false, again=false, lastErr="", everOk=false;
+let phones=ls.get("kiosk-phones",[]);
 function errText(e){
   if(!navigator.onLine)return "인터넷이 끊겼어요";
   if(e&&e.code==="server")return "시트 저장 실패: "+(e.message||"");
@@ -477,17 +530,19 @@ async function api(body){
 }
 async function flush(){
   if(flushing){again=true;return}
-  if(!pending.length){updateSync();setNote();return}
+  if(!pending.length&&!phones.length){updateSync();setNote();return}
   flushing=true; updateSync(); setNote();
   try{
-    const batch=pending.slice();
-    const j=await api({action:"append",orders:batch.map(p=>({no:p.no,rows:p.rows}))});
+    const batch=pending.slice(), pb=phones.slice();
+    const j=await api({action:"append",orders:batch.map(p=>({no:p.no,rows:p.rows})),phones:pb});
     const sent=new Set(j.saved||[]);
     pending=pending.filter(p=>!sent.has(p.no)); ls.set("kiosk-pending",pending);
+    const ps=new Set(j.phonesSaved||[]);
+    phones=phones.filter(p=>!ps.has(p.id)); ls.set("kiosk-phones",phones);
     lastErr="";
   }catch(e){ lastErr=errText(e); }
   flushing=false; updateSync(); setNote(); renderPending();
-  if(again){again=false; if(pending.length&&!lastErr)flush();}
+  if(again){again=false; if((pending.length||phones.length)&&!lastErr)flush();}
 }
 function updateSync(){
   const s=$("sync"),t=s.querySelector("span");
@@ -505,10 +560,10 @@ function renderPending(){
 }
 $("sync").addEventListener("click",()=>{if(pending.length)flush()});
 /* 와이파이가 돌아오면, 그리고 20초마다 미전송 주문 자동 재전송 (같은 주문번호는 시트에 한 번만 저장됨) */
-window.addEventListener("online",()=>{updateSync();if(pending.length)flush()});
+window.addEventListener("online",()=>{updateSync();if(pending.length||phones.length)flush()});
 window.addEventListener("offline",updateSync);
-setInterval(()=>{if(pending.length&&!flushing)flush()},20000);
-if(pending.length)setTimeout(flush,1500);
+setInterval(()=>{if((pending.length||phones.length)&&!flushing)flush()},20000);
+if(pending.length||phones.length)setTimeout(flush,1500);
 
 /* ---------- 매출 ---------- */
 let rows=[], day="today", salesLoading=false;
@@ -534,7 +589,7 @@ async function loadSales(){
   setSalesMsg("시트에서 불러오는 중…");
   try{
     const got=await api({action:"list"});
-    rows=(got.rows||[]).map((r,i)=>({row:i+2,no:r[0]||"",at:r[1]||"",date:normDate(r[2]||r[1]),cat:r[3]||"",item:r[4]||"",qty:numOf(r[5]),list:numOf(r[6]),price:numOf(r[7]),save:numOf(r[8]),amt:numOf(r[9]),pay:r[10]||"",status:r[11]||""})).filter(r=>r.no);
+    rows=(got.rows||[]).map((r,i)=>({row:i+2,no:r[0]||"",at:r[1]||"",date:normDate(r[2]||r[1]),cat:r[3]||"",item:r[4]||"",qty:numOf(r[5]),list:numOf(r[6]),price:numOf(r[7]),save:numOf(r[8]),amt:numOf(r[9]),pay:r[10]||"",status:r[11]||"",phone:r[13]||""})).filter(r=>r.no);
     setSalesMsg("");
   }catch(e){ setSalesMsg(errText(e)+" — 마지막으로 불러온 내용을 보여드려요.",true); }
   salesLoading=false; renderSales();
@@ -564,7 +619,8 @@ function renderSales(){
     const amt=g.rows.reduce((a,r)=>a+r.amt,0);
     const tm=(String(g.at).match(/(\d{1,2}):(\d{2})/)||[]).slice(1,3).join(":");
     const items=g.rows.map(r=>r.item+" ×"+r.qty).join(", ");
-    return `<div class="order${g.cancelled?" cancelled":""}" data-no="${esc(g.no)}"><span class="on num">${esc(g.no.split("-").slice(1).join("-")||g.no)}</span><div class="items">${esc(items)}<small class="num">${esc(g.rows[0].date)} ${tm} · ${esc(g.rows[0].pay)}</small></div><span class="amt num">${won(amt)}</span>
+    const ph=(g.rows.find(r=>r.phone)||{}).phone||"";
+    return `<div class="order${g.cancelled?" cancelled":""}" data-no="${esc(g.no)}"><span class="on num">${esc(g.no.split("-").slice(1).join("-")||g.no)}</span><div class="items">${esc(items)}<small class="num">${esc(g.rows[0].date)} ${tm} · ${esc(g.rows[0].pay)}${ph?` · <b class="ph">${esc(ph)}</b>`:""}</small></div><span class="amt num">${won(amt)}</span>
       <div class="acts">${g.cancelled?`<span class="pill">취소됨</span>`:`<button class="mini danger" data-cancel="${esc(g.no)}">주문 취소</button>`}</div></div>`}).join("")
     :`<div class="empty">${rows.length?"이 날짜에는 주문이 없어요.":"아직 시트에 저장된 주문이 없어요. 주문 화면에서 첫 주문을 접수하면 여기에 쌓입니다."}</div>`;
 }
