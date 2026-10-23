@@ -148,6 +148,7 @@
     <div class="card">
       <div id="sBadge" class="status s-wait">-</div>
       <div class="steps"><span id="st1">접수(송장요청)</span><span id="st2">출력중</span><span id="st3">출력완료</span></div>
+      <div id="refreshRow" style="text-align:center;margin-top:12px"><button class="ghost small" style="width:auto;padding:8px 16px" onclick="manualRefresh()">🔄 상태 새로고침</button><div id="lastChk" style="font-size:12px;color:#999;margin-top:4px"></div></div>
     </div>
 
     <div class="card">
@@ -189,7 +190,7 @@
 // ===== 설정: Apps Script 웹 앱 주소 =====
 var API_URL = 'https://script.google.com/macros/s/AKfycbzVg6NS59RMijBHCXnGQAOUqikt2Toeyvn2IT_MKCVvxHv_Fh0GsuHjeDIzN09s1C9E-A/exec';
 var TIMEOUT_MS = 30000;
-var POLL_MS = 15000;
+var POLL_MS = 10000;
 var MAX_BOXES = 20, MAX_RCP = 10;
 var FEE = 3000, FEE_JEJU = 6000;   // 배송비(박스당), 제주도
 function isJeju(zip) { var n = Number(String(zip || '').replace(/\D/g, '')); return n >= 63000 && n <= 63644; }
@@ -208,7 +209,7 @@ function withTimeout(p) {
   return Promise.race([p, new Promise(function (_, rej) { setTimeout(function () { rej(new Error('timeout')); }, TIMEOUT_MS); })]);
 }
 function apiGet(t) {
-  return withTimeout(fetch(API_URL + '?action=get&t=' + encodeURIComponent(t)).then(function (r) { return r.json(); }));
+  return withTimeout(fetch(API_URL + '?action=get&t=' + encodeURIComponent(t) + '&_=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.json(); }));
 }
 function apiPost(body) {
   return withTimeout(fetch(API_URL, { method: 'POST', body: JSON.stringify(body) }).then(function (r) { return r.json(); }));
@@ -503,6 +504,7 @@ function render() {
   lastStatus = s;
   show('vStatus');
   if (s === '송장요청' || s === '출력중') startPoll(); else stopPoll();
+  $('refreshRow').classList.toggle('hide', !(s === '송장요청' || s === '출력중'));
 }
 
 // ---- 취소: 받는 곳이 여러 곳이면 체크해서 골라 취소 ----
@@ -540,13 +542,27 @@ function doCancel(seqs) {
 // ---- 상태 자동 새로고침 ----
 function startPoll() { stopPoll(); pollTimer = setInterval(refresh, POLL_MS); }
 function stopPoll() { if (pollTimer) clearInterval(pollTimer); pollTimer = null; }
-function refresh() {
-  if (!cur || document.hidden || editing || cancelMode || $('vStatus').classList.contains('hide')) return;
+var refreshing = false;
+function markChecked(ok) {
+  var d = new Date(), p = function (n) { return ('0' + n).slice(-2); };
+  $('lastChk').textContent = ok ? '마지막 확인 ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()) + ' · 자동으로 계속 확인 중' : '연결이 불안정해요. 잠시 후 다시 확인할게요';
+}
+function refresh(force) {
+  if (!cur || editing || cancelMode || $('vStatus').classList.contains('hide')) return;
+  if (document.hidden && !force) return;
+  if (refreshing) return;
+  refreshing = true;
   apiGet(cur.t).then(function (res) {
     if (res.ok && JSON.stringify(res.data) !== JSON.stringify(cur)) { cur = res.data; render(); }
-  }).catch(function () {});
+    markChecked(res.ok);
+  }).catch(function () { markChecked(false); }).then(function () { refreshing = false; });
 }
+function manualRefresh() { $('lastChk').textContent = '확인 중…'; refresh(true); }
+// 화면을 다시 켜거나, 앱을 다시 보거나, 인터넷이 다시 연결되면 바로 확인
 document.addEventListener('visibilitychange', function () { if (!document.hidden) refresh(); });
+window.addEventListener('focus', function () { refresh(); });
+window.addEventListener('pageshow', function () { refresh(); });
+window.addEventListener('online', function () { refresh(); });
 
 function notifyDone() {
   try { navigator.vibrate && navigator.vibrate([300, 150, 300, 150, 300]); } catch (e) {}
