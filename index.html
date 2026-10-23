@@ -500,7 +500,10 @@ function render() {
       (p.memo ? '<br>메모: ' + esc(p.memo) : '') + '</div>';
   }).join('');
 
-  if (lastStatus && lastStatus !== '출력완료' && s === '출력완료') notifyDone();
+  if (lastStatus && lastStatus !== '출력완료' && s === '출력완료') {
+    notifyDone();
+    showDone('📦 송장이 나왔어요!', '<span class="num">' + cur.short + '번</span>택배접수처로 오셔서<br><b>' + cur.short + '번</b>이라고 말씀해 주세요<br><span style="font-size:14px;color:#666">배송비 결제 후 송장 ' + cur.totalBoxes + '장을 드려요</span>');
+  }
   lastStatus = s;
   show('vStatus');
   if (s === '송장요청' || s === '출력중') startPoll(); else stopPoll();
@@ -568,7 +571,10 @@ function notifyDone() {
   try { navigator.vibrate && navigator.vibrate([300, 150, 300, 150, 300]); } catch (e) {}
   try {
     var ctx = new (window.AudioContext || window.webkitAudioContext)(), o = ctx.createOscillator();
-    o.frequency.value = 880; o.connect(ctx.destination); o.start(); setTimeout(function () { o.stop(); }, 400);
+    o.frequency.value = 880; o.connect(ctx.destination); o.start();
+    // 삐-삐-삐 세 번
+    [400, 600, 1000, 1200].forEach(function (t, i) { setTimeout(function () { try { o.frequency.value = i % 2 ? 880 : 0.0001; } catch (e) {} }, t); });
+    setTimeout(function () { o.stop(); }, 1600);
   } catch (e) {}
 }
 
