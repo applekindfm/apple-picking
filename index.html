@@ -68,6 +68,15 @@
   #done .ttl { font-size:22px; font-weight:800; color:var(--ok); margin-bottom:10px; }
   #done .msg { font-size:16px; color:var(--ink); margin-bottom:18px; line-height:1.6; }
   #done .msg .num { display:block; font-size:56px; font-weight:800; color:var(--red); line-height:1.2; }
+  #guide { position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:26; display:none; align-items:center; justify-content:center; padding:24px; }
+  #guide.on { display:flex; }
+  #guide .box { background:#fff; border:2px solid #d8d6e0; border-radius:20px; padding:22px 20px 20px; width:100%; max-width:380px; text-align:center; }
+  #guide .gt { font-size:24px; font-weight:800; padding-bottom:14px; border-bottom:2px solid #d8d6e0; }
+  #guide .g1 { font-size:17px; font-weight:700; margin:18px 0 14px; }
+  #guide .gbox { background:#fdf0f0; border-radius:14px; padding:18px 10px; }
+  #guide .gbox .r { font-size:24px; font-weight:800; color:#b03a2e; }
+  #guide .gbox .k { font-size:21px; font-weight:800; margin-top:6px; }
+  #guide .gn { font-size:14px; color:#666; margin:14px 0 16px; }
 </style>
 </head>
 <body>
@@ -184,6 +193,13 @@
 
 <div id="busy"><div class="spin"></div><div class="txt" id="busyTxt">처리 중…</div></div>
 <div id="done"><div class="box"><div class="ttl" id="doneTtl"></div><div class="msg" id="doneMsg"></div><button class="primary" onclick="closeDone()">확인</button></div></div>
+<div id="guide"><div class="box">
+  <div class="gt">송장 출력 안내</div>
+  <div class="g1">접수 후 송장이 바로 출력되지 않습니다.</div>
+  <div class="gbox"><div class="r">'출력완료' 확인 후</div><div class="k">접수(수령)처로 와주세요.</div></div>
+  <div class="gn">※ 출력완료 확인 전 화면을 끄지 마세요.</div>
+  <button class="primary" onclick="closeGuide()">확인</button>
+</div></div>
 
 <script src="https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"></script>
 <script>
@@ -228,7 +244,9 @@ function busy(on, msg) {
   $('busy').classList.toggle('on', on);
 }
 function showDone(title, html) { $('doneTtl').textContent = title; $('doneMsg').innerHTML = html; $('done').classList.add('on'); }
-function closeDone() { $('done').classList.remove('on'); }
+var guideNext = false;   // 접수 직후: 접수 완료 → [확인] → 송장 출력 안내 → [확인] → 내 접수 화면
+function closeDone() { $('done').classList.remove('on'); if (guideNext) { guideNext = false; $('guide').classList.add('on'); } }
+function closeGuide() { $('guide').classList.remove('on'); window.scrollTo(0, 0); }
 function newReqId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 10); }
 
 // ---- 화면 전환 ----
@@ -451,6 +469,7 @@ function save() {
     reqId = null;
     cur = res.data; editing = false; lastStatus = null;
     render();
+    guideNext = !wasEdit;
     showDone(wasEdit ? '✅ 수정 완료' : '✅ 접수 완료',
       '접수번호<span class="num">' + cur.short + '</span>박스 ' + cur.totalBoxes + '개 · 배송비 <b>' + won(cur.totalFee) + '</b>' +
       (wasEdit ? '<br>수정되었어요.' : '<br>박스에 <b>' + cur.short + '번</b>을 크게 적어 주세요.<br><span style="font-size:14px;color:#666">배송비는 송장 수령하실 때 결제하시면 됩니다. (카드, 현금)</span>'));
