@@ -117,7 +117,16 @@ header.top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom
 .note{font-size:13px;padding:8px 12px;border-radius:10px;background:var(--leaf-soft);color:var(--leaf);font-weight:700}
 .note.wait{background:var(--warn-soft);color:var(--warn)}
 .note.err{background:var(--apple-soft);color:var(--bad)}
-.btns{display:grid;grid-template-columns:1fr 2fr;gap:10px}
+.btns{display:grid;grid-template-columns:1fr 1fr 2fr;gap:8px}
+.edit-btn{border:1.5px solid var(--warn);background:var(--surface);color:var(--warn);border-radius:14px;font-size:16px;font-weight:900;padding:12px 0}
+.editbar{margin:4px 16px 0;padding:10px 12px;border-radius:12px;background:var(--warn-soft);color:var(--warn);font-size:13.5px;font-weight:700;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.editbar button{border:1px solid var(--warn);background:var(--surface);color:var(--warn);border-radius:9px;padding:6px 10px;font-weight:700;font-size:13px;white-space:nowrap}
+.diff{border-radius:14px;padding:12px 14px;text-align:center;font-weight:900;font-size:22px}
+.diff small{display:block;font-size:13px;font-weight:700;opacity:.85}
+.diff.more{background:var(--apple-soft);color:var(--apple)}
+.diff.back{background:var(--leaf-soft);color:var(--leaf)}
+.diff.same{background:var(--line);color:var(--muted)}
+.mini.warn{border-color:var(--warn);color:var(--warn);background:transparent}
 .next{border:0;border-radius:14px;background:var(--leaf);color:var(--surface);font-size:19px;font-weight:900;padding:15px 0}
 .cancel-btn{border:1.5px solid var(--bad);background:var(--surface);color:var(--bad);border-radius:14px;font-size:16px;font-weight:900;padding:12px 0}
 .confirm{border:1.5px solid var(--bad);background:var(--apple-soft);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:10px}
@@ -226,6 +235,7 @@ tr.tot td{font-weight:900;border-bottom:0}
   <section class="grid" id="grid" aria-label="상품"></section>
   <aside class="cart" aria-label="주문서">
     <div class="cart-h"><h2>주문서</h2><button class="ghost" id="clearBtn">전체 비우기</button></div>
+    <div class="editbar" id="editBar" hidden></div>
     <ul class="lines" id="lines"></ul>
     <div class="sum">
       <div class="row"><span>수량</span><span class="num" id="sumQty">0알</span></div>
@@ -264,13 +274,14 @@ tr.tot td{font-weight:900;border-bottom:0}
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="doneTitle">
     <div class="ono"><span id="doneTitle">주문 접수</span><b class="num" id="doneNo">A-001</b></div>
     <div class="charge"><small id="donePay">카드 결제할 금액</small><strong class="num" id="doneTotal">0원</strong></div>
+    <div class="diff" id="doneDiff" hidden></div>
     <ul id="doneLines"></ul>
     <div class="note wait" id="doneNote">시트에 저장하는 중…</div>
     <div class="confirm" id="doneConfirm" hidden>
-      <p>이 주문을 취소할까요? 담았던 사과는 주문서에 다시 넣어 둘게요. 카드 결제를 했다면 단말기에서도 취소해 주세요.</p>
+      <p>이 주문을 취소할까요? 카드 결제를 했다면 단말기에서도 취소해 주세요. (수량만 바꾸려면 ‘주문 수정’을 누르세요)</p>
       <div><button class="yes" id="doneYes">주문 취소하기</button><button class="no" id="doneNo2">아니요</button></div>
     </div>
-    <div class="btns" id="doneBtns"><button class="cancel-btn" id="doneCancel">주문 취소</button><button class="next" id="doneOk">주문 완료</button></div>
+    <div class="btns" id="doneBtns"><button class="cancel-btn" id="doneCancel">주문 취소</button><button class="edit-btn" id="doneEdit">주문 수정</button><button class="next" id="doneOk">주문 완료</button></div>
   </div>
 </div>
 
@@ -359,6 +370,17 @@ function setStatus(map){pstat=map||{};ls.set("popup-status",pstat);renderStatus(
 function add(id,n){if(n>0&&blocked(id))return;const q=Math.max(0,Math.min(999,(cart[id]||0)+n));if(q)cart[id]=q;else delete cart[id];renderCart()}
 function totals(){let q=0,t=0;for(const k in cart){q+=cart[k];t+=cart[k]*byId[k].price}return {q,t}}
 let busy=false;
+let editing=null; // 수정 중인 원래 주문 {no,at,pay,total,lines}
+const shortNo=no=>String(no).split("-").slice(1).join("-")||no;
+function startEdit(o){
+  for(const k in cart)delete cart[k];
+  o.lines.forEach(l=>{if(byId[l.id])cart[l.id]=(cart[l.id]||0)+l.q});
+  pay=o.pay==="현금"?"현금":"카드"; editing=o;
+  ["doneOv","recentOv"].forEach(id=>$(id).hidden=true);
+  if(!$("viewSales").hidden)show(false);
+  renderCart(); toast(`${shortNo(o.no)} 주문을 주문서에 불러왔어요. 고친 뒤 ‘수정 접수’를 누르세요.`);
+}
+function stopEdit(){editing=null;for(const k in cart)delete cart[k];pay="카드";renderCart()}
 function renderCart(){
   const keys=MENU.map(m=>m.id).filter(k=>cart[k]);
   $("lines").innerHTML=keys.length?keys.map(k=>{const m=byId[k],q=cart[k];
@@ -369,6 +391,9 @@ function renderCart(){
   const t=totals();
   $("sumQty").textContent=t.q+"알"; $("sumTotal").textContent=won(t.t);
   $("submitBtn").disabled=!t.q||busy;
+  $("submitBtn").textContent=editing?"수정 접수":"주문 접수";
+  const eb=$("editBar"); eb.hidden=!editing;
+  if(editing){eb.innerHTML=`<span>${esc(shortNo(editing.no))} 주문 수정 중 · 원래 ${won(editing.total)}</span><button id="editStop">수정 그만두기</button>`;$("editStop").onclick=stopEdit}
   document.querySelectorAll("[data-badge]").forEach(b=>{const q=cart[b.dataset.badge]||0;b.hidden=!q;b.textContent=q});
   document.querySelectorAll("[data-pay]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.pay===pay));
 }
@@ -389,9 +414,11 @@ $("submitBtn").onclick=()=>{
   busy=true;renderCart();
   const d=seoul(),no=nextNo(d),at=d.date+" "+d.time;
   const keys=MENU.map(m=>m.id).filter(k=>cart[k]);
-  const rows=keys.map(k=>{const m=byId[k];return [no,at,d.date,m.sheet,cart[k],m.price,cart[k]*m.price,pay,"완료",""]});
-  cur={no,at,date:d.date,pay,total:t.t,qty:t.q,lines:keys.map(k=>({id:k,q:cart[k],amt:cart[k]*byId[k].price})),status:"완료"};
+  const orig=editing, memo=orig?shortNo(orig.no)+" 수정":"";
+  const rows=keys.map(k=>{const m=byId[k];return [no,at,d.date,m.sheet,cart[k],m.price,cart[k]*m.price,pay,"완료",memo]});
+  cur={no,at,date:d.date,pay,total:t.t,qty:t.q,lines:keys.map(k=>({id:k,q:cart[k],amt:cart[k]*byId[k].price})),status:"완료",editOf:orig?{no:orig.no,total:orig.total,pay:orig.pay}:null};
   log.push(cur); pending.push({no,at,rows,tried:false}); save();
+  if(orig){editing=null; cancelOrder(orig.no,orig.at)}   // 새 주문 저장 → 원래 주문 취소 (시트에는 저장 다음에 취소가 반영)
   for(const k in cart)delete cart[k]; pay="카드"; busy=false; renderCart();
   showDone(); flush();
 };
@@ -399,6 +426,13 @@ function showDone(){
   $("doneNo").textContent=cur.no.split("-").slice(1).join("-");
   $("donePay").textContent=cur.pay+" 결제할 금액";
   $("doneTotal").textContent=won(cur.total);
+  const df=$("doneDiff"), eo=cur.editOf; df.hidden=!eo;
+  $("doneTitle").textContent=eo?`${shortNo(eo.no)} 주문 수정`:"주문 접수";
+  if(eo){const d=cur.total-eo.total;
+    df.className="diff "+(d>0?"more":d<0?"back":"same");
+    df.innerHTML=d>0?`<small>원래 ${won(eo.total)} → 새 금액 ${won(cur.total)}</small>${won(d)} 더 받기`
+      :d<0?`<small>원래 ${won(eo.total)} → 새 금액 ${won(cur.total)}</small>${won(-d)} 돌려드리기`
+      :`<small>원래 금액과 같아요</small>추가 결제 없음`;}
   $("doneLines").innerHTML=cur.lines.map(l=>`<li><span>${byId[l.id].name} × ${l.q}알</span><span class="num">${won(l.amt)}</span></li>`).join("");
   $("doneConfirm").hidden=true;$("doneBtns").hidden=false;
   setNote();$("doneOv").hidden=false;
@@ -414,9 +448,9 @@ $("doneCancel").onclick=()=>{$("doneConfirm").hidden=false;$("doneBtns").hidden=
 $("doneNo2").onclick=()=>{$("doneConfirm").hidden=true;$("doneBtns").hidden=false};
 $("doneYes").onclick=()=>{
   const o=cur; cancelOrder(o.no,o.at);
-  o.lines.forEach(l=>{if(!blocked(l.id))cart[l.id]=(cart[l.id]||0)+l.q}); pay=o.pay; renderCart();
-  $("doneOv").hidden=true; toast(`${o.no.split("-").slice(1).join("-")} 주문을 취소했어요. 사과는 주문서에 다시 담아 두었어요.`);
+  $("doneOv").hidden=true; toast(`${shortNo(o.no)} 주문을 취소했어요. 카드 결제했다면 단말기에서도 취소해 주세요.`);
 };
+$("doneEdit").onclick=()=>startEdit(cur);
 
 /* ---------- 주문 취소 ---------- */
 function cancelOrder(no,at){
@@ -438,12 +472,15 @@ function renderRecent(){
     const sent=!pending.some(p=>p.no===l.no&&p.at===l.at);
     return `<div class="rord${l.status==="취소"?" cx":""}"><span class="on num">${esc(l.no.split("-").slice(1).join("-"))}</span>
       <div class="it">${esc(items)}<small class="num">${esc(l.at.slice(11,16))} · ${esc(l.pay)}${sent?"":" · 미전송"}</small></div><span class="amt num">${won(l.total)}</span>
-      <div class="act">${l.status==="취소"?`<span class="pill">취소됨</span>`:`<button class="mini danger" data-rc="${i}">주문 취소</button>`}</div></div>`}).join("")
+      <div class="act">${l.status==="취소"?`<span class="pill">취소됨</span>`:`<button class="mini warn" data-re="${i}">주문 수정</button><button class="mini danger" data-rc="${i}">주문 취소</button>`}</div></div>`}).join("")
     :`<div class="empty">오늘 이 기기에서 받은 주문이 없어요.</div>`;
+  recentShown=list;
   $("recentList").dataset.ids=JSON.stringify(list.map(l=>[l.no,l.at]));
 }
+let recentShown=[];
 $("recentList").addEventListener("click",e=>{
   const ids=JSON.parse($("recentList").dataset.ids||"[]");
+  const ed=e.target.closest("[data-re]"); if(ed){const o=recentShown[+ed.dataset.re];if(o)startEdit(o);return}
   const c=e.target.closest("[data-rc]");
   if(c){const [no]=ids[+c.dataset.rc];c.parentElement.innerHTML=`<span style="font-size:13px;font-weight:700;color:var(--bad)">${esc(no.split("-").slice(1).join("-"))} 주문을 취소할까요?</span><button class="mini danger" data-ry="${c.dataset.rc}">취소하기</button><button class="mini" data-rn>아니요</button>`;return}
   if(e.target.closest("[data-rn]")){renderRecent();return}
@@ -553,12 +590,18 @@ function renderSales(){
   $("orderCount").textContent=list.length;
   $("orderList").innerHTML=list.length?list.map((o,i)=>{const amt=o.rows.reduce((a,r)=>a+r.amt,0);
     return `<div class="rord${o.cx?" cx":""}"><span class="on num">${esc(o.no.split("-").slice(1).join("-"))}</span><div class="it">${esc(o.rows.map(r=>(bySheet[r.item]?bySheet[r.item].name:r.item)+" "+r.qty+"알").join(", "))}<small class="num">${esc(String(o.at).slice(0,16))} · ${esc(o.pay)}</small></div><span class="amt num">${won(amt)}</span>
-      <div class="act">${o.cx?`<span class="pill">취소됨</span>`:`<button class="mini danger" data-sc="${i}">주문 취소</button>`}</div></div>`}).join("")
+      <div class="act">${o.cx?`<span class="pill">취소됨</span>`:`<button class="mini warn" data-se="${i}">주문 수정</button><button class="mini danger" data-sc="${i}">주문 취소</button>`}</div></div>`}).join("")
     :`<div class="empty">${rows.length?"이 날짜에는 주문이 없어요.":"아직 시트에 저장된 주문이 없어요."}</div>`;
+  salesShown=list;
   $("orderList").dataset.ids=JSON.stringify(list.map(o=>[o.no,o.at]));
 }
+let salesShown=[];
 $("orderList").addEventListener("click",async e=>{
   const ids=JSON.parse($("orderList").dataset.ids||"[]");
+  const ed=e.target.closest("[data-se]");
+  if(ed){const o=salesShown[+ed.dataset.se];if(!o)return;
+    const lines=[];o.rows.forEach(r=>{const m=bySheet[r.item];if(m)lines.push({id:m.id,q:r.qty,amt:r.amt})});
+    startEdit({no:o.no,at:o.at,pay:o.pay,total:o.rows.reduce((a,r)=>a+r.amt,0),lines});return}
   const c=e.target.closest("[data-sc]");
   if(c){c.parentElement.innerHTML=`<span style="font-size:13px;font-weight:700;color:var(--bad)">이 주문을 취소할까요? (카드는 단말기에서 따로 취소)</span><button class="mini danger" data-sy="${c.dataset.sc}">취소하기</button><button class="mini" data-sn>아니요</button>`;return}
   if(e.target.closest("[data-sn]")){renderSales();return}
